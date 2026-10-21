@@ -1,6 +1,7 @@
 import {
-  pipeline,
   env,
+  AutoTokenizer,
+  AutoModelForSequenceClassification,
   AutoProcessor,
   AutoModelForImageClassification,
   RawImage,
@@ -12,7 +13,8 @@ env.backends.onnx.wasm.wasmPaths = {
 };
 
 const TEXT_MODEL = "MedAliFarhat/ai-text-detector-onnx"; // RoBERTa, ~125 MB, English only
-const IMAGE_MODEL = "onnx-community/CommunityForensics-DeepfakeDet-ViT-ONNX"; // ViT, ~144 MB
+// The corrected upstream release (July 2026); older copies of this model have wrong weights.
+const IMAGE_MODEL = "buildborderless/CommunityForensics-DeepfakeDet-ViT"; // ViT-Small, ~87 MB
 const THRESHOLD = 0.9; // flag only when the model is quite sure; lower it to hide more
 
 // ---------- Toggle: clicking the toolbar icon flips the switch ----------
@@ -39,12 +41,18 @@ chrome.runtime.onInstalled.addListener(restoreBadge);
 let textModel, imageModel;
 
 async function textScore(text) {
-  textModel ??= pipeline("text-classification", TEXT_MODEL, { dtype: "q8" }).catch((err) => {
+  textModel ??= Promise.all([
+    AutoTokenizer.from_pretrained(TEXT_MODEL),
+    AutoModelForSequenceClassification.from_pretrained(TEXT_MODEL, { dtype: "q8" }),
+  ]).catch((err) => {
     textModel = null; // retry the download next time
     throw err;
   });
-  const results = await (await textModel)(text, { top_k: null });
-  return results.find((r) => r.label === "AI")?.score ?? 0;
+  const [tokenizer, model] = await textModel;
+  // RoBERTa reads at most 512 tokens; longer posts would crash the model.
+  const { logits } = await model(tokenizer(text, { truncation: true, max_length: 512 }));
+  const [human, ai] = logits.data; // labels: 0 = Human, 1 = AI
+  return 1 / (1 + Math.exp(human - ai)); // softmax over the two labels gives P(AI)
 }
 
 async function imageScore(url) {

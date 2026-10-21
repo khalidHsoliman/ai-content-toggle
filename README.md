@@ -22,7 +22,7 @@ To update, download the new release, replace the folder, and click the reload ic
 
 Open LinkedIn and click the extension icon. The badge shows **OFF** while AI content is hidden; click again to show everything.
 
-The first time it runs, it downloads two models from Hugging Face (about 270 MB in total), so the first posts take a while to check. After that, the models are cached in the browser.
+The first time it runs, it downloads two models from Hugging Face (about 210 MB in total), so the first posts take a while to check. After that, the models are cached in the browser.
 
 ## Accuracy
 
@@ -42,7 +42,7 @@ Post text and image links stay in your browser. The only network requests the ex
 
 Models:
 - Text: [MedAliFarhat/ai-text-detector-onnx](https://huggingface.co/MedAliFarhat/ai-text-detector-onnx) (Apache-2.0), an ONNX export of [fakespot-ai/roberta-base-ai-text-detection-v1](https://huggingface.co/fakespot-ai/roberta-base-ai-text-detection-v1)
-- Images: [onnx-community/CommunityForensics-DeepfakeDet-ViT-ONNX](https://huggingface.co/onnx-community/CommunityForensics-DeepfakeDet-ViT-ONNX) (MIT), from *Community Forensics* by Jeongsoo Park and Andrew Owens
+- Images: [buildborderless/CommunityForensics-DeepfakeDet-ViT](https://huggingface.co/buildborderless/CommunityForensics-DeepfakeDet-ViT) (MIT), from *Community Forensics* by Jeongsoo Park and Andrew Owens
 
 Bundled libraries in `lib/` (license files included there):
 - [Transformers.js](https://github.com/huggingface/transformers.js) 4.3.1 (Apache-2.0)
