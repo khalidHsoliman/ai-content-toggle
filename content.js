@@ -7,16 +7,19 @@ const POST_TEXT =
   '[data-testid="expandable-text-box"], .update-components-text, .feed-shared-inline-show-more-text';
 const COMMENT = '[componentkey*="urn:li:comment"]'; // comments use the same text box; skip them
 
+const PROMOTED = /^Promoted( by .+)?$/; // LinkedIn's English label on ad posts
+
 const MIN_TEXT_LENGTH = 200; // text detectors are unreliable on short posts
 const MAX_IMAGES = 3;
 
-let enabled = false;
+let hideAI = false;
+let hideAds = false;
 
 // Check each post once, when it scrolls near the screen (so its images have loaded).
 const io = new IntersectionObserver(
   (entries) => {
     for (const { isIntersecting, target } of entries) {
-      if (enabled && isIntersecting) {
+      if (hideAI && isIntersecting) {
         io.unobserve(target);
         check(target);
       }
@@ -26,10 +29,18 @@ const io = new IntersectionObserver(
 );
 
 function scan() {
-  // observe() ignores posts it's already watching, so repeating this is safe.
   document.querySelectorAll(POST).forEach((post) => {
-    if (!post.dataset.ai) io.observe(post);
+    // observe() ignores posts it's already watching, so repeating this is safe.
+    if (hideAI && !post.dataset.ai) io.observe(post);
+    if (hideAds && !post.dataset.ad && isPromoted(post)) post.dataset.ad = "yes";
   });
+}
+
+// A "Promoted" label anywhere in the post except its own text.
+function isPromoted(post) {
+  return [...post.querySelectorAll("*")].some(
+    (el) => !el.children.length && PROMOTED.test(el.textContent.trim()) && !el.closest(POST_TEXT)
+  );
 }
 
 // The text model only knows English, so skip posts written mostly in other scripts.
@@ -70,22 +81,22 @@ async function check(post) {
   }
 }
 
-function apply(on) {
-  enabled = !!on;
-  document.documentElement.classList.toggle("hide-ai", enabled);
-  if (enabled) {
-    io.disconnect(); // re-observe so posts already on screen get checked now
-    scan();
-  }
+// The popup's two switches are stored as hideAI and hideAds.
+function apply(settings) {
+  hideAI = !!settings.hideAI;
+  hideAds = !!settings.hideAds;
+  document.documentElement.classList.toggle("hide-ai", hideAI);
+  document.documentElement.classList.toggle("hide-ads", hideAds);
+  io.disconnect(); // re-observe so posts already on screen get checked now
+  scan();
 }
 
-chrome.storage.local.get("hideAI").then(({ hideAI }) => apply(hideAI));
-chrome.storage.onChanged.addListener((changes) => {
-  if (changes.hideAI) apply(changes.hideAI.newValue);
-});
+const loadSettings = () => chrome.storage.local.get(["hideAI", "hideAds"]).then(apply);
+loadSettings();
+chrome.storage.onChanged.addListener(loadSettings);
 // LinkedIn adds posts as you scroll. After the extension is reloaded or updated, this old
 // copy of the script can't reach it anymore, so it stops quietly until the tab is refreshed.
 const timer = setInterval(() => {
   if (!chrome.runtime?.id) return clearInterval(timer);
-  if (enabled) scan();
+  if (hideAI || hideAds) scan();
 }, 1000);

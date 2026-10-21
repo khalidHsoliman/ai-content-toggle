@@ -1,6 +1,6 @@
 # AI Content Toggle
 
-A Chrome extension that hides LinkedIn posts likely to be AI-generated. Detection runs entirely in your browser with small open models, so your feed is never sent to a server.
+A Chrome extension that hides LinkedIn posts likely to be AI-generated, and LinkedIn's ads. AI detection runs entirely in your browser with small open models, so your feed is never sent to a server.
 
 ## What it checks
 
@@ -8,6 +8,14 @@ A Chrome extension that hides LinkedIn posts likely to be AI-generated. Detectio
 - **Images:** pictures attached to posts. Avatars and company logos are ignored.
 - **Videos:** only the cover frame, which is a weak signal.
 - **Audio:** not supported yet.
+
+The ads switch hides, without any AI:
+
+- Posts labeled **Promoted**
+- Ads in the right sidebar
+- "Try Premium" and "Share Premium" upsells
+
+The **Promoted** label is matched in English, so Promoted posts are only caught when LinkedIn is set to English. Sidebar ads and Premium upsells are caught in any language.
 
 ## Install
 
@@ -20,7 +28,7 @@ To update, download the new release, replace the folder, and click the reload ic
 
 ## Use
 
-Open LinkedIn and click the extension icon. The badge shows **OFF** while AI content is hidden; click again to show everything.
+Click the extension icon to open its two switches, **Hide AI posts** and **Hide ads**. They work independently, and the badge shows **ON** while either one is on.
 
 The first time it runs, it downloads two models from Hugging Face (about 210 MB in total), so the first posts take a while to check. After that, the models are cached in the browser.
 
@@ -32,7 +40,7 @@ Every checked post gets a `data-ai-score` attribute. Right-click a post and choo
 
 ## If it stops working
 
-LinkedIn changes its page structure often. If posts stop being checked, update the two selectors at the top of `content.js` (`POST` and `POST_TEXT`) to match the current markup.
+LinkedIn changes its page structure often. If posts stop being checked, update the selectors at the top of `content.js` (`POST` and `POST_TEXT`) to match the current markup. If ads come back, update `PROMOTED` in `content.js` or the ad rules in `styles.css`.
 
 ## Privacy
 

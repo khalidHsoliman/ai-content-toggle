@@ -17,24 +17,15 @@ const TEXT_MODEL = "MedAliFarhat/ai-text-detector-onnx"; // RoBERTa, ~125 MB, En
 const IMAGE_MODEL = "buildborderless/CommunityForensics-DeepfakeDet-ViT"; // ViT-Small, ~87 MB
 const THRESHOLD = 0.9; // flag only when the model is quite sure; lower it to hide more
 
-// ---------- Toggle: clicking the toolbar icon flips the switch ----------
+// ---------- Badge: shows "ON" while either popup switch is on ----------
 
-chrome.action.onClicked.addListener(async () => {
-  const { hideAI = false } = await chrome.storage.local.get("hideAI");
-  await chrome.storage.local.set({ hideAI: !hideAI });
-  updateBadge(!hideAI);
-});
-
-function updateBadge(hidden) {
-  chrome.action.setBadgeText({ text: hidden ? "OFF" : "" });
+async function updateBadge() {
+  const { hideAI, hideAds } = await chrome.storage.local.get(["hideAI", "hideAds"]);
+  chrome.action.setBadgeText({ text: hideAI || hideAds ? "ON" : "" });
 }
-
-async function restoreBadge() {
-  const { hideAI = false } = await chrome.storage.local.get("hideAI");
-  updateBadge(hideAI);
-}
-chrome.runtime.onStartup.addListener(restoreBadge);
-chrome.runtime.onInstalled.addListener(restoreBadge);
+chrome.storage.onChanged.addListener(updateBadge);
+chrome.runtime.onStartup.addListener(updateBadge);
+chrome.runtime.onInstalled.addListener(updateBadge);
 
 // ---------- Detection: models load on first use; the browser caches the downloads ----------
 

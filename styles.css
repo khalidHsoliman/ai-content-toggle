@@ -1,4 +1,13 @@
-/* While the toggle is on, hide the posts the models flagged as AI. */
+/* "Hide AI posts" switch: hide the posts the models flagged. */
 html.hide-ai [data-ai="yes"] {
+  display: none !important;
+}
+
+/* "Hide ads" switch: Promoted posts, sidebar ads and Premium upsells. */
+html.hide-ads [data-ad="yes"],
+html.hide-ads iframe[title="advertisement"],
+html.hide-ads div:has(> iframe[title="advertisement"]:only-child),
+html.hide-ads a[href*="/premium/products"],
+html.hide-ads a[href*="/premium/referrals"] {
   display: none !important;
 }
