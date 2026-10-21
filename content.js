@@ -1,7 +1,11 @@
 // LinkedIn changes its markup often. If posts stop getting checked, right-click a
-// post, choose Inspect, and update these two selectors.
-const POST = '[data-urn*="urn:li:activity"], [data-id*="urn:li:activity"]';
-const POST_TEXT = ".update-components-text, .feed-shared-inline-show-more-text";
+// post, choose Inspect, and update these selectors. Each one lists the current
+// layout first, then the older layout that some accounts may still have.
+const POST =
+  '[role="listitem"][componentkey^="update-card"], [data-urn*="urn:li:activity"], [data-id*="urn:li:activity"]';
+const POST_TEXT =
+  '[data-testid="expandable-text-box"], .update-components-text, .feed-shared-inline-show-more-text';
+const COMMENT = '[componentkey*="urn:li:comment"]'; // comments use the same text box; skip them
 
 const MIN_TEXT_LENGTH = 200; // text detectors are unreliable on short posts
 const MAX_IMAGES = 3;
@@ -46,7 +50,8 @@ function mediaUrls(post) {
 
 async function check(post) {
   post.dataset.ai = "checking";
-  const rawText = post.querySelector(POST_TEXT)?.innerText.trim() ?? "";
+  const textBox = [...post.querySelectorAll(POST_TEXT)].find((el) => !el.closest(COMMENT));
+  const rawText = textBox?.innerText.trim() ?? "";
   const text = rawText.length >= MIN_TEXT_LENGTH && isMostlyLatin(rawText) ? rawText : "";
   const images = mediaUrls(post);
   if (!text && images.length === 0) {

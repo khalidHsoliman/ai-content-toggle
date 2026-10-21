@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Content Toggle",
-  "version": "1.0",
+  "version": "1.0.1",
   "description": "Hide LinkedIn posts that on-device models flag as AI-generated.",
   "permissions": ["storage"],
   "host_permissions": [
