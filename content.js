@@ -64,6 +64,7 @@ async function check(post) {
     post.dataset.ai = result.isAI ? "yes" : "no";
     post.dataset.aiScore = result.score.toFixed(2); // visible in DevTools when tuning
   } catch (err) {
+    if (!chrome.runtime?.id) return; // extension was reloaded or updated; this tab needs a refresh
     console.warn("AI Content Toggle:", err);
     post.dataset.ai = "error";
   }
@@ -82,4 +83,9 @@ chrome.storage.local.get("hideAI").then(({ hideAI }) => apply(hideAI));
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.hideAI) apply(changes.hideAI.newValue);
 });
-setInterval(() => enabled && scan(), 1000); // LinkedIn adds posts as you scroll
+// LinkedIn adds posts as you scroll. After the extension is reloaded or updated, this old
+// copy of the script can't reach it anymore, so it stops quietly until the tab is refreshed.
+const timer = setInterval(() => {
+  if (!chrome.runtime?.id) return clearInterval(timer);
+  if (enabled) scan();
+}, 1000);
