@@ -1,0 +1,4 @@
+/* While the toggle is on, hide the posts the models flagged as AI. */
+html.hide-ai [data-ai="yes"] {
+  display: none !important;
+}
