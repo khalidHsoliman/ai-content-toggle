@@ -1,6 +1,15 @@
-/* "Hide AI posts" switch: hide the posts the models flagged. */
-html.hide-ai [data-ai="yes"] {
+/* "Hide AI posts" switch: a flagged post collapses into a one-line bar.
+   Clicking the bar shows the post (content.js adds data-revealed). */
+html.hide-ai [data-ai="yes"]:not([data-revealed]) > * {
   display: none !important;
+}
+html.hide-ai [data-ai="yes"]:not([data-revealed])::before {
+  content: "Likely AI post (" attr(data-ai-percent) "%) · Click to show" !important;
+  display: block !important;
+  padding: 10px 16px;
+  font: 14px/1.4 system-ui, sans-serif;
+  opacity: 0.7;
+  cursor: pointer;
 }
 
 /* "Hide ads" switch: Promoted posts, sidebar ads and Premium upsells. */

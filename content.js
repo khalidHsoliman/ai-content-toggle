@@ -74,6 +74,7 @@ async function check(post) {
     if (!result) throw new Error("detection failed");
     post.dataset.ai = result.isAI ? "yes" : "no";
     post.dataset.aiScore = result.score.toFixed(2); // visible in DevTools when tuning
+    post.dataset.aiPercent = Math.round(result.score * 100); // shown on the collapsed bar
   } catch (err) {
     if (!chrome.runtime?.id) return; // extension was reloaded or updated; this tab needs a refresh
     console.warn("AI Content Toggle:", err);
@@ -90,6 +91,20 @@ function apply(settings) {
   io.disconnect(); // re-observe so posts already on screen get checked now
   scan();
 }
+
+// A flagged post collapses into a one-line bar (see styles.css); clicking the bar shows it.
+document.addEventListener(
+  "click",
+  (event) => {
+    const post = event.target;
+    if (hideAI && post.matches?.('[data-ai="yes"]:not([data-revealed])')) {
+      event.preventDefault();
+      event.stopPropagation(); // don't let LinkedIn treat it as a click on the post
+      post.dataset.revealed = "yes";
+    }
+  },
+  true
+);
 
 const loadSettings = () => chrome.storage.local.get(["hideAI", "hideAds"]).then(apply);
 loadSettings();

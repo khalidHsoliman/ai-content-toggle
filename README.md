@@ -30,6 +30,8 @@ To update, download the new release, replace the folder, and click the reload ic
 
 Click the extension icon to open its two switches, **Hide AI posts** and **Hide ads**. They work independently, and the badge shows **ON** while either one is on.
 
+A post flagged as AI collapses into a one-line bar, like "Likely AI post (93%) · Click to show". Click the bar to see the post. Ads are hidden completely.
+
 The first time it runs, it downloads two models from Hugging Face (about 210 MB in total), so the first posts take a while to check. After that, the models are cached in the browser.
 
 ## Accuracy
