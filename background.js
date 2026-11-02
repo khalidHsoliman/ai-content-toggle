@@ -40,6 +40,8 @@ async function textScore(text) {
     throw err;
   });
   const [tokenizer, model] = await textModel;
+  // The model was trained on single-line plain text. Unicode "bold" letters become plain ones.
+  text = text.normalize("NFKC").replace(/\s+/g, " ").trim();
   // RoBERTa reads at most 512 tokens; longer posts would crash the model.
   const { logits } = await model(tokenizer(text, { truncation: true, max_length: 512 }));
   const [human, ai] = logits.data; // labels: 0 = Human, 1 = AI
