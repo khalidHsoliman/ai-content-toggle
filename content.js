@@ -6,11 +6,7 @@ const POST =
 const POST_TEXT =
   '[data-testid="expandable-text-box"], .update-components-text, .feed-shared-inline-show-more-text';
 const COMMENT = '[componentkey*="urn:li:comment"]'; // comments use the same text box; skip them
-
-const PROMOTED = /^Promoted( by .+)?$/; // LinkedIn's English label on ad posts
-
-const MIN_TEXT_LENGTH = 200; // text detectors are unreliable on short posts
-const MAX_IMAGES = 3;
+// The rules for what to check and what to send (Promoted label, text, media) are in rules.js.
 
 let hideAI = false;
 let hideAds = false;
@@ -39,31 +35,22 @@ function scan() {
 // A "Promoted" label anywhere in the post except its own text.
 function isPromoted(post) {
   return [...post.querySelectorAll("*")].some(
-    (el) => !el.children.length && PROMOTED.test(el.textContent.trim()) && !el.closest(POST_TEXT)
+    (el) => !el.children.length && isPromotedLabel(el.textContent) && !el.closest(POST_TEXT)
   );
 }
 
-// The text model only knows English, so skip posts written mostly in other scripts.
-function isMostlyLatin(text) {
-  const letters = text.match(/\p{L}/gu)?.length ?? 0;
-  const latin = text.match(/[a-z]/gi)?.length ?? 0;
-  return latin > 0.6 * letters;
-}
-
-// Post images and video cover frames, without avatars and logos.
+// Every image and video cover frame in the post; pickMedia() (rules.js) keeps the post media.
 function mediaUrls(post) {
   const images = [...post.querySelectorAll("img")].map((img) => img.src);
   const posters = [...post.querySelectorAll("video[poster]")].map((v) => v.poster);
-  return [...images, ...posters]
-    .filter((url) => url.includes("/dms/image/") && !/profile-displayphoto|company-logo/.test(url))
-    .slice(0, MAX_IMAGES);
+  return pickMedia([...images, ...posters]);
 }
 
 async function check(post) {
   post.dataset.ai = "checking";
   const textBox = [...post.querySelectorAll(POST_TEXT)].find((el) => !el.closest(COMMENT));
   const rawText = textBox?.innerText.trim() ?? "";
-  const text = rawText.length >= MIN_TEXT_LENGTH && isMostlyLatin(rawText) ? rawText : "";
+  const text = detectableText(rawText);
   // ChatGPT-style formatting (see style.js) flags a post without running the models.
   const style = text ? aiStyle(rawText) : null;
   if (style?.points >= STYLE_MIN_POINTS) {

@@ -51,7 +51,7 @@ To see how well detection works on your own feed, click **Test accuracy on your 
 
 ## If it stops working
 
-LinkedIn changes its page structure often. If posts stop being checked, update the selectors at the top of `content.js` (`POST` and `POST_TEXT`) to match the current markup. If ads come back, update `PROMOTED` in `content.js` or the ad rules in `styles.css`.
+LinkedIn changes its page structure often. If posts stop being checked, update the selectors at the top of `content.js` (`POST` and `POST_TEXT`) to match the current markup. If ads come back, update `PROMOTED` in `rules.js` or the ad rules in `styles.css`.
 
 ## Privacy
 
