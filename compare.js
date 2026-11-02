@@ -77,12 +77,28 @@ function summarize(rows, key, name, seconds) {
   $("summary").append(div, ...lines.map((line) => Object.assign(document.createElement("div"), { textContent: line })));
 }
 
+// The style rules (style.js) give yes or no, so there's one line instead of one per threshold.
+function summarizeStyle(rows) {
+  const flagged = (label) => rows.filter((r) => r.label === label && r.style.points >= STYLE_MIN_POINTS).length;
+  const count = (label) => rows.filter((r) => r.label === label).length;
+  const div = document.createElement("div");
+  div.innerHTML = "<b>Style rules</b> (the extension flags these without running a model)";
+  $("summary").append(
+    div,
+    Object.assign(document.createElement("div"), {
+      textContent: `Catches ${flagged("AI")} of ${count("AI")} AI posts, wrongly flags ${flagged("Human")} of ${count("Human")} human posts`,
+    })
+  );
+}
+
+const styleCell = ({ points, hits }) => (points >= STYLE_MIN_POINTS ? `AI-style: ${hits.join(", ")}` : hits.join(", ") || "–");
+
 function render(rows) {
   const body = $("results").querySelector("tbody");
   body.replaceChildren(
     ...rows.map((r) => {
       const tr = document.createElement("tr");
-      for (const [value, cls] of [[r.label], [percent(r.current), "num"], [percent(r.large), "num"], [r.text.slice(0, 90)]]) {
+      for (const [value, cls] of [[r.label], [percent(r.current), "num"], [percent(r.large), "num"], [styleCell(r.style)], [r.text.slice(0, 90)]]) {
         const td = document.createElement("td");
         td.textContent = value;
         if (cls) td.className = cls;
@@ -100,6 +116,7 @@ $("run").addEventListener("click", async () => {
   try {
     const rows = parse($("input").value);
     if (!rows.length) throw new Error("Paste some posts first.");
+    for (const row of rows) row.style = aiStyle(row.text); // instant, so before the models run
     const useLarge = $("useLarge").checked;
     // Timing skips the first post, which includes loading (and maybe downloading) the models.
     const time = { current: 0, large: 0 };
@@ -119,6 +136,7 @@ $("run").addEventListener("click", async () => {
     const perPost = (key) => time[key] / Math.max(rows.length - 1, 1) / 1000;
     summarize(rows, "current", "Current model", perPost("current"));
     if (useLarge) summarize(rows, "large", "Large model", perPost("large"));
+    summarizeStyle(rows);
     status(`Done: ${rows.length} posts scored.`);
   } catch (err) {
     status(err.message);

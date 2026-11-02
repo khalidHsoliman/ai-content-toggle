@@ -30,17 +30,24 @@ To update, download the new release, replace the folder, and click the reload ic
 
 Click the extension icon to open its two switches, **Hide AI posts** and **Hide ads**. They work independently, and the badge shows **ON** while either one is on.
 
-A post flagged as AI collapses into a one-line bar, like "Likely AI post (93%) · Click to show". Click the bar to see the post. Ads are hidden completely.
+A post flagged as AI collapses into a one-line bar. Click the bar to see the post. Posts are flagged in two ways:
+
+- **By the AI detector:** "Likely AI post (93%) · Click to show", with the model's confidence.
+- **By its formatting:** "AI-style post (markdown, arrow bullets) · Click to show", for posts with the telltale signs of ChatGPT-style LinkedIn writing: markdown that LinkedIn doesn't render, arrow and emoji bullets, em dashes, stock phrases like "Here's what changed". These signals are listed in `style.js`.
+
+Ads are hidden completely.
 
 The first time it runs, it downloads two models from Hugging Face (about 210 MB in total), so the first posts take a while to check. After that, the models are cached in the browser.
 
 ## Accuracy
 
-AI detectors are evidence, not proof. Expect some human-written posts to be hidden (especially polished writing or designed graphics) and some AI posts to slip through. A post is hidden only when a model is at least 90% confident. You can change this with `THRESHOLD` in `background.js`.
+AI detectors are evidence, not proof. Expect some human-written posts to be hidden (especially polished writing, influencer-style formatting or designed graphics) and many AI posts to slip through, especially ones a person has edited. A post is hidden by the detector only when a model is at least 90% confident. You can change this with `THRESHOLD` in `background.js`, and the formatting rules with `STYLE_MIN_POINTS` in `style.js`.
 
-Every checked post gets a `data-ai-score` attribute. Right-click a post and choose **Inspect** to see it.
+In a test on 226 human LinkedIn posts from before ChatGPT existed, about 9% were wrongly flagged (6% by the detector, 4% by the formatting rules). About half of 80 AI-written LinkedIn posts were caught. The test set is small, so treat these numbers as rough.
 
-To see how well detection works on your own feed, click **Test accuracy on your own posts** in the popup. Paste posts you're confident about, each labeled AI or Human, and the page shows how many each threshold catches and how many human posts it wrongly flags. It can also test a much larger detector (about 1.7 GB, needs a GPU) side by side.
+A post flagged by the detector gets a `data-ai-score` attribute, and one flagged by its formatting gets `data-ai-style`. Right-click a post and choose **Inspect** to see them.
+
+To see how well detection works on your own feed, click **Test accuracy on your own posts** in the popup. Paste posts you're confident about, each labeled AI or Human, and the page shows how many each threshold catches and how many human posts it wrongly flags, for both the detector and the formatting rules. It can also test a much larger detector (about 1.7 GB, needs a GPU) side by side.
 
 ## If it stops working
 

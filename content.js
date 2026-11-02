@@ -64,6 +64,13 @@ async function check(post) {
   const textBox = [...post.querySelectorAll(POST_TEXT)].find((el) => !el.closest(COMMENT));
   const rawText = textBox?.innerText.trim() ?? "";
   const text = rawText.length >= MIN_TEXT_LENGTH && isMostlyLatin(rawText) ? rawText : "";
+  // ChatGPT-style formatting (see style.js) flags a post without running the models.
+  const style = text ? aiStyle(rawText) : null;
+  if (style?.points >= STYLE_MIN_POINTS) {
+    post.dataset.aiStyle = style.hits.join(", "); // shown on the collapsed bar
+    post.dataset.ai = "yes";
+    return;
+  }
   const images = mediaUrls(post);
   if (!text && images.length === 0) {
     post.dataset.ai = "no";

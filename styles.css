@@ -11,6 +11,10 @@ html.hide-ai [data-ai="yes"]:not([data-revealed])::before {
   opacity: 0.7;
   cursor: pointer;
 }
+/* Flagged by its formatting (style.js) rather than the model: name the signals instead. */
+html.hide-ai [data-ai="yes"][data-ai-style]:not([data-revealed])::before {
+  content: "AI-style post (" attr(data-ai-style) ") · Click to show" !important;
+}
 
 /* "Hide ads" switch: Promoted posts, sidebar ads and Premium upsells. */
 html.hide-ads [data-ad="yes"],
