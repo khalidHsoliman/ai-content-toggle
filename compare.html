@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Test accuracy · AI Content Toggle</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --surface: #ffffff;
+    --text: #1d1d1d;
+    --muted: #666666;
+    --line: #dddddd;
+    --accent: #0a66c2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --surface: #1b1f23; --text: #e8e8e8; --muted: #a3a3a3; --line: #3a3f44; --accent: #71b7fb; }
+  }
+  body { margin: 0 auto; max-width: 860px; padding: 24px; background: var(--surface); color: var(--text); font: 14px/1.5 system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p { margin: 0 0 12px; color: var(--muted); max-width: 70ch; }
+  textarea { box-sizing: border-box; width: 100%; height: 260px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; font: 13px/1.5 ui-monospace, monospace; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin: 12px 0; }
+  button { padding: 8px 16px; border: 0; border-radius: 16px; background: var(--accent); color: var(--surface); font: inherit; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #status { min-height: 1.5em; color: var(--muted); }
+  #summary div { margin: 2px 0; }
+  #summary div:has(b) { margin-top: 10px; }
+  .table { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+</style>
+</head>
+<body>
+  <h1>Test accuracy on your own posts</h1>
+  <p>Paste posts you're confident about. Start each one with a line that says <b>AI</b> or <b>Human</b>, and put a line with just <b>===</b> between posts. 30–40 posts, about half of each, give a useful picture.</p>
+  <textarea id="input" spellcheck="false" placeholder="AI
+Small patch, big milestone: my first contribution to the Linux kernel...
+===
+Human
+Spent the weekend fixing my bike and finally..."></textarea>
+  <div class="controls">
+    <button id="run">Score posts</button>
+    <label><input type="checkbox" id="useLarge"> Also test the large model (about 1.7 GB download, needs a GPU)</label>
+  </div>
+  <div id="status" role="status"></div>
+  <div id="summary"></div>
+  <div class="table"><table id="results" hidden>
+    <thead><tr><th>Your label</th><th>Current model</th><th>Large model</th><th>Post</th></tr></thead>
+    <tbody></tbody>
+  </table></div>
+  <script type="module" src="compare.js"></script>
+</body>
+</html>

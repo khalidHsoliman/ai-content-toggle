@@ -40,6 +40,8 @@ AI detectors are evidence, not proof. Expect some human-written posts to be hidd
 
 Every checked post gets a `data-ai-score` attribute. Right-click a post and choose **Inspect** to see it.
 
+To see how well detection works on your own feed, click **Test accuracy on your own posts** in the popup. Paste posts you're confident about, each labeled AI or Human, and the page shows how many each threshold catches and how many human posts it wrongly flags. It can also test a much larger detector (about 1.7 GB, needs a GPU) side by side.
+
 ## If it stops working
 
 LinkedIn changes its page structure often. If posts stop being checked, update the selectors at the top of `content.js` (`POST` and `POST_TEXT`) to match the current markup. If ads come back, update `PROMOTED` in `content.js` or the ad rules in `styles.css`.

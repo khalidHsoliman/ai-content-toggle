@@ -60,7 +60,19 @@
   }
   input:checked { background: var(--accent); }
   input:checked::before { transform: translateX(14px); }
-  input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input:focus-visible, .link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .link {
+    display: block;
+    margin: 4px 0 6px;
+    padding: 6px 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .link:hover { text-decoration: underline; }
   @media (prefers-reduced-motion: reduce) {
     input, input::before { transition: none; }
   }
@@ -82,6 +94,7 @@
     </span>
     <input type="checkbox" role="switch" id="hideAds">
   </label>
+  <button id="compare" class="link">Test accuracy on your own posts</button>
   <script src="popup.js"></script>
 </body>
 </html>
