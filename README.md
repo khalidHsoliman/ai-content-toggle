@@ -37,7 +37,7 @@ A post flagged as AI collapses into a one-line bar. Click the bar to see the pos
 
 Ads are hidden completely.
 
-The first time it runs, it downloads two models from Hugging Face (about 210 MB in total), so the first posts take a while to check. After that, the models are cached in the browser.
+The first time it runs, it downloads two models from Hugging Face (about 210 MB in total), so the first posts take a while to check. After that, the models are cached in the browser. If a model download fails, the extension waits before trying again (10 seconds, doubling up to 10 minutes while it keeps failing); flip either switch off and on to retry right away.
 
 ## Accuracy
 
@@ -52,6 +52,8 @@ To see how well detection works on your own feed, click **Test accuracy on your 
 ## If it stops working
 
 LinkedIn changes its page structure often. If posts stop being checked, update the selectors at the top of `content.js` (`POST` and `POST_TEXT`) to match the current markup. If ads come back, update `PROMOTED` in `rules.js` or the ad rules in `styles.css`.
+
+The rules in `rules.js` and `style.js` have tests: run `node --test` in this folder (Node 20 or later, nothing to install).
 
 ## Privacy
 

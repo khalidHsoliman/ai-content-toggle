@@ -17,7 +17,10 @@ const io = new IntersectionObserver(
     for (const { isIntersecting, target } of entries) {
       if (hideAI && isIntersecting) {
         io.unobserve(target);
-        check(target);
+        // The post may have filled in since scan() looked: settle whether it's an ad before
+        // sending it to the models (check() handles the wait after failures).
+        if (hideAds && needsAdCheck(target.dataset)) checkAd(target);
+        if (needsAICheck(target.dataset, true, hideAds)) check(target);
       }
     }
   },
@@ -26,10 +29,17 @@ const io = new IntersectionObserver(
 
 function scan() {
   document.querySelectorAll(POST).forEach((post) => {
+    if (hideAds && needsAdCheck(post.dataset)) checkAd(post);
+    // After the ad check, so a hidden ad isn't observed at all.
     // observe() ignores posts it's already watching, so repeating this is safe.
-    if (hideAI && !post.dataset.ai) io.observe(post);
-    if (hideAds && !post.dataset.ad && isPromoted(post)) post.dataset.ad = "yes";
+    if (hideAI && needsAICheck(post.dataset, retry.ready(Date.now()), hideAds)) io.observe(post);
   });
+}
+
+// Records whether a post is an ad, once it has content to look at (see adVerdict in rules.js).
+function checkAd(post) {
+  const ad = adVerdict(isPromoted(post), post.textContent.trim() !== "");
+  if (ad) post.dataset.ad = ad;
 }
 
 // A "Promoted" label anywhere in the post except its own text.
@@ -63,9 +73,14 @@ async function check(post) {
     post.dataset.ai = "no";
     return;
   }
+  if (!retry.ready(Date.now())) {
+    post.dataset.ai = "error"; // the models failed recently; this post is tried after the wait
+    return;
+  }
   try {
     const result = await chrome.runtime.sendMessage({ type: "detect", text, images });
     if (!result) throw new Error("detection failed");
+    retry.reset();
     post.dataset.ai = result.isAI ? "yes" : "no";
     post.dataset.aiScore = result.score.toFixed(2); // visible in DevTools when tuning
     post.dataset.aiPercent = Math.round(result.score * 100); // shown on the collapsed bar
@@ -73,6 +88,7 @@ async function check(post) {
     if (!chrome.runtime?.id) return; // extension was reloaded or updated; this tab needs a refresh
     console.warn("AI Content Toggle:", err);
     post.dataset.ai = "error";
+    retry.failed(Date.now());
   }
 }
 
@@ -82,6 +98,7 @@ function apply(settings) {
   hideAds = !!settings.hideAds;
   document.documentElement.classList.toggle("hide-ai", hideAI);
   document.documentElement.classList.toggle("hide-ads", hideAds);
+  retry.reset(); // flipping a switch retries the models right away
   io.disconnect(); // re-observe so posts already on screen get checked now
   scan();
 }
