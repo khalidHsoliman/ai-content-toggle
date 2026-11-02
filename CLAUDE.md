@@ -14,10 +14,13 @@ Chrome extension (Manifest V3) that hides AI-generated LinkedIn posts, using on-
 - `manifest.json`: version, permissions, content script, popup.
 - `background.js`: service worker. Badge, model loading, detection (one at a time), keep-alive during downloads.
 - `style.js`: rules for ChatGPT-style LinkedIn formatting (markdown, arrow bullets, em dashes, stock phrases…). Loaded before `content.js` and by the compare page.
+- `rules.js`: content.js's decisions without DOM access: what needs an AI or ad check, the ad verdict, the retry wait after failed checks (10 s doubling to 10 min), the Promoted label, which text and media to send. Loaded after `style.js`, before `content.js`.
 - `content.js`: finds posts, flags AI-style posts itself (`data-ai-style`), sends the rest for detection, marks posts with `data-ai` / `data-ad`, handles click-to-show on collapsed posts.
 - `styles.css`: collapses AI posts into a "Likely AI post (N%)" or "AI-style post (signals)" bar; hides ads.
 - `popup.html` / `popup.js`: two switches stored as `hideAI` and `hideAds` in `chrome.storage.local`, plus a link to the test page.
 - `compare.html` / `compare.js`: accuracy test page. Scores labeled posts with the current model, the style rules and, optionally, the large model.
+- `test/`: `node --test` suites for `rules.js` and `style.js` (32 tests, no dependencies).
+- `verify-wiring.js`: runs `style.js`, `rules.js` and `content.js` together on a fake page, clock and chrome API (`node verify-wiring.js`, 16 checks). Keep it out of `test/`, or `node --test` picks it up.
 - `lib/`: vendored Transformers.js 4.3.1 and ONNX Runtime Web 1.31.0-dev.20260914 (asyncify WASM) with their licenses. Don't edit these files.
 
 ## Models
@@ -44,6 +47,8 @@ Chrome extension (Manifest V3) that hides AI-generated LinkedIn posts, using on-
 - `chrome-extension://invalid` errors in LinkedIn's console come from LinkedIn probing for extensions. Ignore them.
 - GitHub push protection flags a gist ID in `lib/transformers.min.js` as a Mistral API key. It's a false positive.
 - Keep the git tag, the release title and the manifest version in sync.
+- Before committing, run `node --test` and `node verify-wiring.js`.
+- Releases: `gh` is logged in. Build `ai-content-toggle.zip` with `git archive --prefix=ai-content-toggle/` from the release commit, leaving out `CLAUDE.md`, `test/`, `verify-wiring.js` and `.gitignore`. Release notes follow the format of earlier releases (What's changed, Install, Updating from the previous version).
 
 ## Status and next steps
 
