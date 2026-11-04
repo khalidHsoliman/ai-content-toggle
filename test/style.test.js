@@ -59,8 +59,10 @@ test("arrow bullets: plain • dots, ▪ ▫ squares and © ® ™ lines are not
   assert.deepEqual(hits("Intro\n✅ first\n• plain dot\n👉 second"), ["arrow bullets"]);
 });
 
-test("em dash: any em dash, worth 2 (a hyphen or en dash is not)", () => {
-  assert.deepEqual(aiStyle("Widgets — the good kind."), { points: 2, hits: ["em dash"] });
+test("em dash: any em dash, worth 1 however many there are (a hyphen or en dash is not)", () => {
+  // Only 1 point: plenty of people write with em dashes, so one alone is weak evidence.
+  assert.deepEqual(aiStyle("Widgets — the good kind."), { points: 1, hits: ["em dash"] });
+  assert.deepEqual(aiStyle("Widgets — the good kind — the made up kind — all of them."), { points: 1, hits: ["em dash"] });
   assert.deepEqual(hits("Widgets - the good kind."), []);
   assert.deepEqual(hits("Widgets – the good kind."), []);
 });
@@ -114,16 +116,24 @@ test("numbered list: three or more lines starting with a number and . or ), wort
 });
 
 test("points add up and hits keep the signal order from STYLE_SIGNALS", () => {
+  // Two em dashes here, still 1 point between them.
   assert.deepEqual(aiStyle("Widgets — **bold** — delve in.\n1. a\n2. b\n3. c"), {
-    points: 3 + 2 + 2 + 1,
+    points: 3 + 1 + 2 + 1,
     hits: ["markdown", "em dash", "stock phrases", "numbered list"],
   });
 });
 
-test("STYLE_MIN_POINTS is 3: markdown alone flags, one weak signal with an em dash flags, an em dash alone doesn't", () => {
+test("STYLE_MIN_POINTS is 3: markdown alone flags, an em dash needs 2 more points to flag", () => {
   assert.equal(STYLE_MIN_POINTS, 3);
   assert.ok(aiStyle("Some **bold words**.").points >= STYLE_MIN_POINTS);
-  assert.ok(aiStyle("Widgets — are they worth it?").points >= STYLE_MIN_POINTS); // em dash + closing question
+  // A common human pattern: one em dash and a question at the end. 1 + 1 = 2, not flagged.
+  assert.deepEqual(aiStyle("Widgets — are they worth it?"), { points: 2, hits: ["em dash", "closing question"] });
+  // With a 2-point signal, or two 1-point ones, an em dash still tips a post over.
+  assert.deepEqual(aiStyle("Here's what I learned — widgets."), { points: 3, hits: ["em dash", "stock phrases"] });
+  assert.deepEqual(aiStyle("Steps — in order:\n1. dig\n2. plant\n3. water\nWhich would you pick?"), {
+    points: 3,
+    hits: ["em dash", "closing question", "numbered list"],
+  });
   assert.ok(aiStyle("Widgets — the good kind.").points < STYLE_MIN_POINTS);
   assert.ok(aiStyle("Thoughts?").points < STYLE_MIN_POINTS);
 });

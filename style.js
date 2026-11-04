@@ -1,6 +1,7 @@
 // Formatting and phrases typical of ChatGPT-style LinkedIn posts. Used by content.js and compare.js.
 // Each signal adds its weight; a post with STYLE_MIN_POINTS or more counts as AI-style.
 // Unicode bold and closing questions weigh little: influencers used them long before ChatGPT.
+// Em dashes weigh little too: plenty of people write with them.
 const STYLE_MIN_POINTS = 3;
 
 const STYLE_SIGNALS = [
@@ -11,7 +12,7 @@ const STYLE_SIGNALS = [
   // Plain • dots and ▪ ▫ squares (word-processor bullets) don't count, nor © ® ™:
   // Unicode lists those five as pictographic, like emoji.
   ["arrow bullets", 2, (t) => (t.match(/^\s*(?:[→↳➜►◆]|(?![©®™▪▫])\p{Extended_Pictographic})/gmu) ?? []).length >= 2],
-  ["em dash", 2, (t) => /—/.test(t)],
+  ["em dash", 1, (t) => /—/.test(t)],
   // Eight or more lines, nearly all of them short.
   ["short lines", 1, (t) => {
     const lines = t.split("\n").filter((line) => line.trim());
