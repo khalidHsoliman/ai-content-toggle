@@ -8,7 +8,9 @@ const STYLE_SIGNALS = [
   ["markdown", 3, (t) => /\*\*[^*\n]+\*\*|^#{1,3} /m.test(t)],
   ["Unicode bold", 1, (t) => /[\u{1D400}-\u{1D7FF}]/u.test(t)],
   // Two or more lines starting with an arrow or emoji: → ↳ ✅ 👉 📌 …
-  ["arrow bullets", 2, (t) => (t.match(/^\s*(?:[→↳➜►•◆]|\p{Extended_Pictographic})/gmu) ?? []).length >= 2],
+  // Plain • dots and ▪ ▫ squares (word-processor bullets) don't count, nor © ® ™:
+  // Unicode lists those five as pictographic, like emoji.
+  ["arrow bullets", 2, (t) => (t.match(/^\s*(?:[→↳➜►◆]|(?![©®™▪▫])\p{Extended_Pictographic})/gmu) ?? []).length >= 2],
   ["em dash", 2, (t) => /—/.test(t)],
   // Eight or more lines, nearly all of them short.
   ["short lines", 1, (t) => {

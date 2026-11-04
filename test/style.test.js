@@ -36,9 +36,27 @@ test("Unicode bold: mathematical bold letters, worth 1", () => {
 test("arrow bullets: two or more lines starting with an arrow or emoji, worth 2", () => {
   assert.deepEqual(aiStyle("Intro\n→ first point\n→ second point"), { points: 2, hits: ["arrow bullets"] });
   assert.deepEqual(hits("Intro\n✅ first point\n  👉 indented second point"), ["arrow bullets"]);
-  assert.deepEqual(hits("Intro\n• first\n◆ second"), ["arrow bullets"]);
+  assert.deepEqual(hits("Intro\n► first\n◆ second"), ["arrow bullets"]);
+  assert.deepEqual(hits("Intro\n✔️ first\n📌 second\n🔹 third"), ["arrow bullets"]);
   assert.deepEqual(hits("Intro\n→ only one bullet line"), []);
   assert.deepEqual(hits("Emoji at the end of a line 🎉\nand another 🎉"), []);
+});
+
+test("arrow bullets: plain • dots, ▪ ▫ squares and © ® ™ lines are not bullets", () => {
+  assert.deepEqual(hits("Shopping list:\n• eggs\n• flour\n• made up jam"), []);
+  // Each symbol on its own, so dropping any one from the exclusion fails here.
+  assert.deepEqual(hits("Shopping list:\n▪ eggs\n▪ flour"), []);
+  assert.deepEqual(hits("Shopping list:\n▫ eggs\n▫ flour"), []);
+  assert.deepEqual(hits("© one made up credit\n© another"), []);
+  assert.deepEqual(hits("® one made up mark\n® another"), []);
+  assert.deepEqual(hits("™ one made up mark\n™ another"), []);
+  assert.deepEqual(hits("© Made up studio, all rights reserved\n® A made up registered name"), []);
+  // With the emoji variation selector (U+FE0F) they're still not bullets.
+  assert.deepEqual(hits("©\uFE0F made up credit\n®\uFE0F made up mark"), []);
+  assert.deepEqual(hits("▪\uFE0F eggs\n▫\uFE0F flour"), []);
+  // They don't count towards real bullets either: one emoji line plus a dot line is one bullet.
+  assert.deepEqual(hits("Intro\n✅ a real bullet\n• a plain dot\n© a made up credit"), []);
+  assert.deepEqual(hits("Intro\n✅ first\n• plain dot\n👉 second"), ["arrow bullets"]);
 });
 
 test("em dash: any em dash, worth 2 (a hyphen or en dash is not)", () => {
