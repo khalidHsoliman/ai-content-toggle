@@ -61,14 +61,16 @@ async function imageScore(url) {
   return 1 / (1 + Math.exp(-logits.data[0])); // one logit; sigmoid gives P(AI)
 }
 
+// score is the highest of the text and image scores; textScore is the text model's alone
+// (null when no text was sent), for the middle band in rules.js.
 async function detect({ text, images }) {
-  const scores = [];
-  if (text) scores.push(await textScore(text));
+  const fromText = text ? await textScore(text) : null;
+  const scores = fromText === null ? [] : [fromText];
   for (const url of images) {
     scores.push(await imageScore(url).catch((err) => (console.warn(err), 0)));
   }
   const score = Math.max(0, ...scores);
-  return { score, isAI: score >= THRESHOLD };
+  return { score, isAI: score >= THRESHOLD, textScore: fromText };
 }
 
 let queue = Promise.resolve(); // run one detection at a time

@@ -34,7 +34,7 @@ A post flagged as AI collapses into a one-line bar. Click the bar to see the pos
 
 - **By the AI detector:** "Likely AI post (93%) · Click to show", with the model's confidence.
 - **By its formatting:** "AI-style post (markdown, arrow bullets) · Click to show", for posts with the telltale signs of ChatGPT-style LinkedIn writing: markdown that LinkedIn doesn't render, arrow and emoji bullets, em dashes, stock phrases like "Here's what changed". These signals are listed in `style.js`.
-- **By both together:** "Likely AI post (72%, em dash, closing question) · Click to show", for a post the detector finds somewhat likely (50% or more) that also has some of those signals (2 points' worth, where 3 would flag it alone). This only applies to posts without images or videos.
+- **By both together:** "Likely AI post (72%, em dash, closing question) · Click to show", for a post whose text the detector finds somewhat likely (50% or more) that also has some of those signals (2 points' worth, where 3 would flag it alone). Only the text score counts here, so an image alone never flags a post this way. The percent on the bar is the highest of the post's text and image scores.
 
 Ads are hidden completely.
 

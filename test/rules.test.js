@@ -15,12 +15,14 @@ const { needsAICheck, needsAdCheck, adVerdict, retry, isPromotedLabel, isMostlyL
 const { aiVerdict, BAND_MIN_SCORE, BAND_MIN_POINTS, STYLE_MIN_POINTS } =
   vm.runInThisContext("({ aiVerdict, BAND_MIN_SCORE, BAND_MIN_POINTS, STYLE_MIN_POINTS })");
 
-// A reply from background.js. Its THRESHOLD (0.9) decides isAI; these tests only see the result.
-const reply = (score) => ({ score, isAI: score >= 0.9 });
-const TEXT_ONLY = false;
-const WITH_IMAGES = true;
+// Replies from background.js, built the way detect() builds them. Its THRESHOLD (0.9) decides
+// isAI from score, the highest of the text and image scores; textScore is the text model's alone.
+const verdictOf = (score, textScore) => ({ score, isAI: score >= 0.9, textScore });
+const reply = (text) => verdictOf(text, text); // a post sent without images
+const withImage = (text, image) => verdictOf(Math.max(text, image), text);
+const imageOnly = (image) => verdictOf(image, null); // no text was sent
 
-test("aiVerdict: the band is a score of 0.5 or more with 2 or more style points; 3 points flag alone", () => {
+test("aiVerdict: the band is a text score of 0.5 or more with 2 or more style points; 3 points flag alone", () => {
   assert.equal(BAND_MIN_SCORE, 0.5);
   assert.equal(BAND_MIN_POINTS, 2);
   assert.equal(STYLE_MIN_POINTS, 3);
@@ -30,50 +32,62 @@ test("aiVerdict: 3+ style points flag with no model score at all, so the models 
   assert.equal(aiVerdict(3, null), "style");
   assert.equal(aiVerdict(7, null), "style");
   // Style wins whatever the model says, and with or without images.
-  assert.equal(aiVerdict(3, reply(0.1), WITH_IMAGES), "style");
-  assert.equal(aiVerdict(3, reply(0.95), TEXT_ONLY), "style");
+  assert.equal(aiVerdict(3, withImage(0.1, 0.1)), "style");
+  assert.equal(aiVerdict(3, reply(0.95)), "style");
 });
 
 test("aiVerdict: with no model score (not sent, downloading, failed), fewer than 3 points never flag", () => {
   for (const points of [0, 1, 2]) {
     assert.equal(aiVerdict(points, null), "", `${points} points`);
-    assert.equal(aiVerdict(points, null, TEXT_ONLY), "", `${points} points, text only`);
-    assert.equal(aiVerdict(points, undefined, TEXT_ONLY), "", `${points} points, undefined result`);
+    assert.equal(aiVerdict(points, undefined), "", `${points} points, undefined result`);
   }
 });
 
 test("aiVerdict: at 0.9 the model flags on its own, with no style points, with or without images", () => {
-  assert.equal(aiVerdict(0, reply(0.9), TEXT_ONLY), "model");
-  assert.equal(aiVerdict(0, reply(0.9), WITH_IMAGES), "model");
-  assert.equal(aiVerdict(2, reply(0.99), TEXT_ONLY), "model"); // the clear case, not the band
+  assert.equal(aiVerdict(0, reply(0.9)), "model");
+  assert.equal(aiVerdict(0, withImage(0.1, 0.9)), "model"); // an image score this high still flags alone
+  assert.equal(aiVerdict(0, imageOnly(0.95)), "model");
+  assert.equal(aiVerdict(2, reply(0.99)), "model"); // the clear case, not the band
   // The 0.9 itself lives in background.js: aiVerdict trusts isAI, whatever the score.
-  assert.equal(aiVerdict(0, { score: 0.5, isAI: true }, TEXT_ONLY), "model");
-  assert.equal(aiVerdict(0, { score: 0.95, isAI: false }, TEXT_ONLY), "");
+  assert.equal(aiVerdict(0, { score: 0.5, isAI: true, textScore: 0.5 }), "model");
+  assert.equal(aiVerdict(0, { score: 0.95, isAI: false, textScore: 0.95 }), "");
 });
 
 test("aiVerdict: just under 0.9, 2 style points flag through the band and 1 doesn't", () => {
-  assert.equal(aiVerdict(2, reply(0.89), TEXT_ONLY), "band");
-  assert.equal(aiVerdict(1, reply(0.89), TEXT_ONLY), "");
-  assert.equal(aiVerdict(0, reply(0.89), TEXT_ONLY), "");
+  assert.equal(aiVerdict(2, reply(0.89)), "band");
+  assert.equal(aiVerdict(1, reply(0.89)), "");
+  assert.equal(aiVerdict(0, reply(0.89)), "");
 });
 
-test("aiVerdict: the band starts at exactly 0.5", () => {
-  assert.equal(aiVerdict(2, reply(0.5), TEXT_ONLY), "band");
-  assert.equal(aiVerdict(2, reply(0.49), TEXT_ONLY), "");
-  assert.equal(aiVerdict(2, reply(0.4999), TEXT_ONLY), "");
-  assert.equal(aiVerdict(1, reply(0.5), TEXT_ONLY), "");
+test("aiVerdict: the band starts at a text score of exactly 0.5", () => {
+  assert.equal(aiVerdict(2, reply(0.5)), "band");
+  assert.equal(aiVerdict(2, reply(0.49)), "");
+  assert.equal(aiVerdict(2, reply(0.4999)), "");
+  assert.equal(aiVerdict(1, reply(0.5)), "");
 });
 
-test("aiVerdict: no band for posts sent with images, whose score may be an image's", () => {
-  assert.equal(aiVerdict(2, reply(0.7), WITH_IMAGES), "");
-  assert.equal(aiVerdict(2, reply(0.5), WITH_IMAGES), "");
-  assert.equal(aiVerdict(2, reply(0.89), WITH_IMAGES), "");
+test("aiVerdict: an image score alone never triggers the band", () => {
+  // The highest score is the image's and sits in the band, but the text score is below 0.5.
+  assert.equal(aiVerdict(2, withImage(0.3, 0.7)), "");
+  assert.equal(aiVerdict(2, withImage(0.49, 0.89)), "");
+  assert.equal(aiVerdict(2, withImage(0, 0.5)), "");
+  // No text score at all (no text was sent): no band, whatever the image scored.
+  assert.equal(aiVerdict(2, imageOnly(0.7)), "");
+  assert.equal(aiVerdict(2, { score: 0.7, isAI: false }), ""); // a reply without textScore
+});
+
+test("aiVerdict: a text score in the band flags with 2 style points, with or without images", () => {
+  assert.equal(aiVerdict(2, reply(0.7)), "band");
+  assert.equal(aiVerdict(2, withImage(0.7, 0.1)), "band"); // the image scored lower
+  assert.equal(aiVerdict(2, withImage(0.6, 0.8)), "band"); // the image scored higher, still under 0.9
+  assert.equal(aiVerdict(2, withImage(0.5, 0.2)), "band");
+  assert.equal(aiVerdict(1, withImage(0.7, 0.8)), ""); // still needs 2 style points
 });
 
 test("aiVerdict: low scores and no style points don't flag", () => {
-  assert.equal(aiVerdict(0, reply(0), TEXT_ONLY), "");
-  assert.equal(aiVerdict(2, reply(0.1), TEXT_ONLY), "");
-  assert.equal(aiVerdict(1, reply(0.7), TEXT_ONLY), "");
+  assert.equal(aiVerdict(0, reply(0)), "");
+  assert.equal(aiVerdict(2, reply(0.1)), "");
+  assert.equal(aiVerdict(1, reply(0.7)), "");
 });
 
 test("needsAICheck: a post without data-ai is due for a check, even while the models wait", () => {

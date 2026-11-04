@@ -26,15 +26,15 @@ function needsAICheck(dataset, canRetry, adsHidden) {
 //   "style": STYLE_MIN_POINTS (style.js) or more style points, so the models aren't needed
 //   "model": the model is sure on its own (isAI, decided by THRESHOLD in background.js)
 //   "band":  a middling score plus some style points (see BAND_MIN_SCORE above)
-// result is the model's reply, { score, isAI }, or null when there is none yet (not sent,
-// still downloading, failed): then style points alone decide, as they always have.
-// background.js replies with the highest of the text and image scores, so the band only
-// applies to posts sent without images, where the score is the text model's.
-function aiVerdict(points, result, hasImages) {
+// result is the model's reply, { score, isAI, textScore }, or null when there is none yet
+// (not sent, still downloading, failed): then style points alone decide, as they always have.
+// score is the highest of the text and image scores, so the band uses textScore, the text
+// model's alone: an image score never triggers it. No text score (null), no band.
+function aiVerdict(points, result) {
   if (points >= STYLE_MIN_POINTS) return "style";
   if (!result) return "";
   if (result.isAI) return "model";
-  if (!hasImages && points >= BAND_MIN_POINTS && result.score >= BAND_MIN_SCORE) return "band";
+  if (result.textScore != null && points >= BAND_MIN_POINTS && result.textScore >= BAND_MIN_SCORE) return "band";
   return "";
 }
 

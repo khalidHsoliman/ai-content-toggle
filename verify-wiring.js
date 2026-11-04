@@ -167,26 +167,37 @@ const rounds = (sent) => [...new Set(sent.map((s) => s.t))];
     check("with Hide ads off, the ad is checked by the model", ad.dataset.ai === "no", `ad data-ai=${ad.dataset.ai}`);
   }
 
-  // 7. The middle band: a 0.7 score flags a text-only post with 2 style points, not one with 1
-  //    point or one sent with images; the model flags alone at 0.9+; 3+ points skip the model.
+  // 7. The middle band: a 0.7 text score flags a post with 2 style points, not one with 1 point;
+  //    with an image, the text score decides, never the image's; the model flags alone at 0.9+;
+  //    3+ points skip the model. Replies are built like detect() in background.js.
   {
     const twoPoints = long + "\nIs it worth it — really?"; // em dash + closing question
+    const media = "https://media.licdn.com/dms/image/v2/x/feedshare-shrink_800/0/1";
     const band = post({ text: twoPoints });
     const onePoint = post({ text: long + "\nIs it worth it?" });
-    const withImage = post({ text: twoPoints, images: ["https://media.licdn.com/dms/image/v2/x/feedshare-shrink_800/0/1"] });
+    const imageHigh = post({ text: long + "\nIs it worth it — truly?", images: [media] }); // text 0.3, image 0.7
+    const textBand = post({ text: long + "\nIs it worth it — honestly?", images: [media] }); // text 0.6, image 0.8
     const sure = post({ text: long + " sure" });
     const styledPost = post({ text: styled });
-    const p = page([band, onePoint, withImage, sure, styledPost], { hideAI: true },
-      (now, m) => (m.text.endsWith("sure") ? { score: 0.95, isAI: true } : { score: 0.7, isAI: false }));
+    const scores = { [imageHigh.text]: [0.3, 0.7], [textBand.text]: [0.6, 0.8], [sure.text]: [0.95] };
+    const p = page([band, onePoint, imageHigh, textBand, sure, styledPost], { hideAI: true }, (now, m) => {
+      const [text, image] = scores[m.text] ?? [0.7];
+      const score = Math.max(text, ...(m.images.length ? [image] : []));
+      return { score, isAI: score >= 0.9, textScore: text };
+    });
     await p.start(); await p.run(2);
     const d = band.dataset;
     check("band: 0.7 + 2 style points flags, bar shows percent and signals",
       d.ai === "yes" && String(d.aiPercent) === "70" && d.aiBand === "em dash, closing question" && !d.aiStyle,
       `data-ai=${d.ai}, percent=${d.aiPercent}, band=${d.aiBand}, style=${d.aiStyle}`);
     check("band: 0.7 + 1 style point isn't flagged", onePoint.dataset.ai === "no" && !onePoint.dataset.aiBand, `data-ai=${onePoint.dataset.ai}`);
-    const sentImages = p.sent.find((x) => x.m.text === withImage.text && x.m.images.length === 1);
-    check("band: not for a post sent with images", !!sentImages && withImage.dataset.ai === "no" && !withImage.dataset.aiBand,
-      `sent with image: ${!!sentImages}, data-ai=${withImage.dataset.ai}`);
+    const sentImage = (t) => p.sent.some((x) => x.m.text === t.text && x.m.images.length === 1);
+    check("band: an image score alone doesn't trigger it (text 0.3, image 0.7)",
+      sentImage(imageHigh) && imageHigh.dataset.ai === "no" && !imageHigh.dataset.aiBand,
+      `sent with image: ${sentImage(imageHigh)}, data-ai=${imageHigh.dataset.ai}`);
+    check("band: a text score in the band flags a post with an image; bar shows the highest score (text 0.6, image 0.8)",
+      sentImage(textBand) && textBand.dataset.ai === "yes" && textBand.dataset.aiBand === "em dash, closing question" && String(textBand.dataset.aiPercent) === "80",
+      `sent with image: ${sentImage(textBand)}, data-ai=${textBand.dataset.ai}, band=${textBand.dataset.aiBand}, percent=${textBand.dataset.aiPercent}`);
     check("model sure on its own (isAI) flags without band signals", sure.dataset.ai === "yes" && !sure.dataset.aiBand && !sure.dataset.aiStyle,
       `data-ai=${sure.dataset.ai}, band=${sure.dataset.aiBand}`);
     check("3+ style points still skip the model", styledPost.dataset.ai === "yes" && !!styledPost.dataset.aiStyle && !p.sent.some((x) => x.m.text === styled),

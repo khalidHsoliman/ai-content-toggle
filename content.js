@@ -83,8 +83,8 @@ async function check(post) {
     const result = await chrome.runtime.sendMessage({ type: "detect", text, images });
     if (!result) throw new Error("detection failed");
     retry.reset();
-    // The model's own verdict, or the middle band: a middling score plus some style points.
-    const verdict = aiVerdict(points, result, images.length > 0);
+    // The model's own verdict, or the middle band: a middling text score plus some style points.
+    const verdict = aiVerdict(points, result);
     post.dataset.ai = verdict ? "yes" : "no";
     post.dataset.aiScore = result.score.toFixed(2); // visible in DevTools when tuning
     post.dataset.aiPercent = Math.round(result.score * 100); // shown on the collapsed bar

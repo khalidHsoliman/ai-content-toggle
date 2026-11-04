@@ -61,13 +61,18 @@ const long = "We moved the made up workshop to a bigger shed this spring and spe
   // ---------- 2. aiVerdict in rules.js ----------
   const r = load(["style.js", "rules.js"]);
   const aiVerdict = g(r, "aiVerdict");
-  const R = (score, isAI = score >= 0.9) => ({ score, isAI });
+  // Replies built like detect() in background.js: score is the highest, textScore the text model's.
+  const R = (score, isAI = score >= 0.9) => ({ score, isAI, textScore: score }); // sent without images
+  const RI = (text, image) => ({ score: Math.max(text, image), isAI: Math.max(text, image) >= 0.9, textScore: text });
   check("aiVerdict exists", () => typeof aiVerdict === "function" || { detail: "not defined" });
-  check("aiVerdict: 0.7 + 2 points, no images -> band", () => aiVerdict(2, R(0.7), false) === "band");
-  check("aiVerdict: band starts at exactly 0.5", () => aiVerdict(2, R(0.5), false) === "band" && aiVerdict(2, R(0.49), false) === "");
-  check("aiVerdict: 1 point is not enough for the band", () => aiVerdict(1, R(0.85), false) === "");
-  check("aiVerdict: no band with images", () => aiVerdict(2, R(0.7), true) === "");
-  check("aiVerdict: the model alone (isAI) flags", () => aiVerdict(0, R(0.95), true) === "model");
+  check("aiVerdict: 0.7 + 2 points, text only -> band", () => aiVerdict(2, R(0.7)) === "band");
+  check("aiVerdict: band starts at exactly 0.5", () => aiVerdict(2, R(0.5)) === "band" && aiVerdict(2, R(0.49)) === "");
+  check("aiVerdict: 1 point is not enough for the band", () => aiVerdict(1, R(0.85)) === "");
+  check("aiVerdict: an image score alone never triggers the band", () =>
+    aiVerdict(2, RI(0.3, 0.7)) === "" && aiVerdict(2, { score: 0.7, isAI: false, textScore: null }) === "");
+  check("aiVerdict: a text score in the band flags with or without images", () =>
+    aiVerdict(2, RI(0.6, 0.8)) === "band" && aiVerdict(2, RI(0.7, 0.1)) === "band" && aiVerdict(2, R(0.7)) === "band");
+  check("aiVerdict: the model alone (isAI) flags", () => aiVerdict(0, RI(0.1, 0.95)) === "model");
   check("aiVerdict: 3+ points flag with no model result", () => aiVerdict(3, null) === "style");
   check("aiVerdict: under 3 points with no model result doesn't flag", () => aiVerdict(2, null) === "" && aiVerdict(0, null) === "");
 
@@ -122,24 +127,29 @@ const long = "We moved the made up workshop to a bigger shed this spring and spe
   const media = "https://media.licdn.com/dms/image/v2/x/feedshare-shrink_800/0/1";
 
   await checkAsync("wiring: 0.7 + 2 style points flags the post with a band label", async () => {
-    const p1 = post({ text: twoPts }); const pg = page([p1], () => ({ score: 0.7, isAI: false }));
+    const p1 = post({ text: twoPts }); const pg = page([p1], () => ({ score: 0.7, isAI: false, textScore: 0.7 }));
     await pg.start(); await pg.run(2);
     return (p1.dataset.ai === "yes" && !!p1.dataset.aiBand && !p1.dataset.aiStyle) || { detail: JSON.stringify(p1.dataset) };
   });
   await checkAsync("wiring: 0.7 + 1 style point is not flagged", async () => {
-    const p1 = post({ text: onePt }); const pg = page([p1], () => ({ score: 0.7, isAI: false }));
+    const p1 = post({ text: onePt }); const pg = page([p1], () => ({ score: 0.7, isAI: false, textScore: 0.7 }));
     await pg.start(); await pg.run(2);
     return p1.dataset.ai === "no" || { detail: JSON.stringify(p1.dataset) };
   });
-  await checkAsync("wiring: no band for a post with an image", async () => {
-    const p1 = post({ text: twoPts, images: [media] }); const pg = page([p1], () => ({ score: 0.7, isAI: false }));
+  await checkAsync("wiring: an image score alone doesn't trigger the band (text 0.3, image 0.7)", async () => {
+    const p1 = post({ text: twoPts, images: [media] }); const pg = page([p1], () => ({ score: 0.7, isAI: false, textScore: 0.3 }));
     await pg.start(); await pg.run(2);
-    return (p1.dataset.ai === "no" && pg.sent.some((x) => x.m.images.length === 1)) || { detail: JSON.stringify(p1.dataset) };
+    return (p1.dataset.ai === "no" && !p1.dataset.aiBand && pg.sent.some((x) => x.m.images.length === 1)) || { detail: JSON.stringify(p1.dataset) };
   });
-  await checkAsync("wiring: no band for a post with a video cover frame", async () => {
-    const p1 = post({ text: twoPts, posters: [media] }); const pg = page([p1], () => ({ score: 0.7, isAI: false }));
+  await checkAsync("wiring: a text score in the band flags a post with an image (text 0.6, image 0.8)", async () => {
+    const p1 = post({ text: twoPts, images: [media] }); const pg = page([p1], () => ({ score: 0.8, isAI: false, textScore: 0.6 }));
     await pg.start(); await pg.run(2);
-    return p1.dataset.ai === "no" || { detail: JSON.stringify(p1.dataset) };
+    return (p1.dataset.ai === "yes" && !!p1.dataset.aiBand && pg.sent.some((x) => x.m.images.length === 1)) || { detail: JSON.stringify(p1.dataset) };
+  });
+  await checkAsync("wiring: a text score in the band flags a post with a video cover frame", async () => {
+    const p1 = post({ text: twoPts, posters: [media] }); const pg = page([p1], () => ({ score: 0.7, isAI: false, textScore: 0.7 }));
+    await pg.start(); await pg.run(2);
+    return (p1.dataset.ai === "yes" && !!p1.dataset.aiBand && pg.sent.some((x) => x.m.images.length === 1)) || { detail: JSON.stringify(p1.dataset) };
   });
   await checkAsync("wiring: 3+ style points flag without sending anything to the model", async () => {
     const p1 = post({ text: styled }); const pg = page([p1], () => ({ score: 0.1, isAI: false }));
@@ -148,7 +158,7 @@ const long = "We moved the made up workshop to a bigger shed this spring and spe
   });
   await checkAsync("wiring: model down -> a 2-point post isn't flagged; after recovery the band flags it", async () => {
     const p1 = post({ text: twoPts }); let up = false;
-    const pg = page([p1], () => (up ? { score: 0.7, isAI: false } : null));
+    const pg = page([p1], () => (up ? { score: 0.7, isAI: false, textScore: 0.7 } : null));
     await pg.start(); await pg.run(3);
     const during = p1.dataset.ai;
     up = true; await pg.run(10);

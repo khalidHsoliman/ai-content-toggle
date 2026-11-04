@@ -78,7 +78,7 @@ function summarizeStyle(rows) {
 }
 
 // What the extension decides (aiVerdict in rules.js): the current model's own verdict, the
-// style rules, or the middle band. Posts here have no images, so the band always applies.
+// style rules, or the middle band. Posts here are sent without images, so the score is the text score.
 // Skipped posts (see the run loop) count as not flagged, as they are in the feed.
 function summarizeCombined(rows) {
   const count = (label, rs = rows) => rs.filter((r) => r.label === label).length;
@@ -135,7 +135,7 @@ $("run").addEventListener("click", async () => {
       // Like content.js: a post under 200 characters or not mostly Latin gets no style check and
       // no text score, and with no images it isn't checked at all, so it's never flagged.
       row.skipped = !detectableText(row.text);
-      row.verdict = row.skipped ? "" : aiVerdict(row.style.points, result, false); // sent without images
+      row.verdict = row.skipped ? "" : aiVerdict(row.style.points, result);
       timed(i, "current", start);
       if (useLarge) {
         start = performance.now();
