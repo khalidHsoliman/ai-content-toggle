@@ -103,10 +103,44 @@ test("closing question: ends with a question mark (hashtags allowed after), wort
   assert.deepEqual(hits("Which widget would you pick?\n#widgets #sheds"), ["closing question"]);
   assert.deepEqual(hits("Which widget would you pick?  \n"), ["closing question"]); // trailing whitespace
   assert.deepEqual(hits("Which widget would you pick? I chose the blue one."), []);
-  // "thoughts?" or "agree?" counts wherever it appears.
+  // A line starting with "Thoughts?" or "Agree?" counts, even when the post doesn't end there.
   assert.deepEqual(hits("Thoughts? Let me know in the shed."), ["closing question"]);
-  assert.deepEqual(hits("Do you agree? Either way, widgets."), ["closing question"]);
+  assert.deepEqual(hits("Widgets are great.\n  agree? Tell me below."), ["closing question"]);
+  // Mid-line, only "your thoughts?" counts.
+  assert.deepEqual(hits("Do you agree? Either way, widgets."), []);
 });
+
+// Made-up posts where "thoughts?" or "agree?" isn't asking the reader to react. Each one
+// doesn't end with a question, so it hit only through the old "anywhere in the post" match.
+for (const [name, text] of [
+  ["a rhetorical question opening a line", "Second thoughts? Never. Twelve years after leaving the office job I still think opening the made-up bakery was the right call. The early mornings are rough, but the regulars make up for it."],
+  ["a quoted question", 'At the planning meeting someone asked "do we all agree?" and the room went quiet. We did not, as it turned out, and the project was better for the argument that followed.'],
+  ["afterthoughts?", "Any afterthoughts? Only that I should have packed a bigger umbrella for the made-up coastal walk. Photos from the day are in the comments."],
+  ["disagree? mid-line", "Would anyone disagree? Probably my brother, who still insists the old shed roof was fine. It was not fine. It leaked onto the lawnmower for three winters."],
+  ["disagree? starting a line", "The old shed roof was fine, according to my brother.\nDisagree? So do I. It leaked onto the lawnmower for three winters."],
+]) {
+  test(`closing question: not for ${name}`, () => {
+    assert.deepEqual(hits(text), [], name);
+  });
+}
+
+test("closing question: a quoted \"agree?\" no longer tips a post with a stock phrase over the line", () => {
+  const text = 'Here\'s what surprised me at the made-up volunteers\' meeting. Someone asked "do we all agree?" and for once we actually did. The litter pick is moving to Sundays.';
+  assert.deepEqual(aiStyle(text), { points: 2, hits: ["stock phrases"] });
+  assert.ok(aiStyle(text).points < STYLE_MIN_POINTS);
+});
+
+// Made-up engagement bait that doesn't end with a question. These hit before the change too;
+// they guard against narrowing the rule so far that it only looks at the last character.
+for (const [name, text] of [
+  ["Thoughts? then a call to action", "Consistency beats intensity every single time.\n\nSmall habits, repeated daily, compound into big results.\n\nThoughts? Drop them in the comments 👇"],
+  ["Agree? then a repost line", "Leadership is not a title. It is a decision you make every day.\n\nAgree? Repost ♻️ to share with your network."],
+  ["your thoughts? mid-line", "The best teams I have seen share one habit: they write things down. What are your thoughts? Let me know below."],
+]) {
+  test(`closing question: still counts ${name}`, () => {
+    assert.ok(hits(text).includes("closing question"), name);
+  });
+}
 
 test("numbered list: three or more lines starting with a number and . or ), worth 1", () => {
   assert.deepEqual(aiStyle("Steps:\n1. open\n2. close\n3. repeat"), { points: 1, hits: ["numbered list"] });

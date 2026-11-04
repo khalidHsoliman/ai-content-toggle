@@ -21,7 +21,9 @@ const STYLE_SIGNALS = [
   ["stock phrases", 2, (t) =>
     /here['’]s (?:what|the thing|how|why)|key takeaways?|the results?(?: after| were| are)?:|important note|let that sink in|game[- ]changer|in today['’]s (?:fast|digital|world)|\bdelve\b|unlock(?:ing)? (?:the|your)|navigat(?:e|ing) the|ever[- ]evolving|(?:isn['’]t|is not|wasn['’]t) just|not just .{3,40}, (?:but|it['’]s)|save this|follow .{2,40} for more|repost ♻|(?:thrilled|excited) to (?:announce|share)|tl;dr/i.test(t)],
   // Ends with an engagement question ("Which books changed your career?"), hashtags aside.
-  ["closing question", 1, (t) => /\?\s*(?:#\S+\s*)*$/.test(t.trim()) || /(?:thoughts|agree)\?/i.test(t)],
+  // Or asks for reactions before a call to action: a line starting "Thoughts?" or "Agree?",
+  // or "your thoughts?" anywhere. Not "disagree?", "afterthoughts?" or a quoted "do we agree?".
+  ["closing question", 1, (t) => /\?\s*(?:#\S+\s*)*$/.test(t.trim()) || /^\s*(?:thoughts|agree)\?|\byour thoughts\?/im.test(t)],
   ["numbered list", 1, (t) => (t.match(/^\s*(?:\d+[.)]|[\u{1D7CE}-\u{1D7FF}][.)])\s+\S/gmu) ?? []).length >= 3],
 ];
 
