@@ -12,22 +12,6 @@ const $ = (id) => document.getElementById(id);
 const status = (text) => ($("status").textContent = text);
 const percent = (score) => (score == null ? "–" : `${Math.round(score * 100)}%`);
 
-// Posts are separated by a line with just ===, and each starts with a line saying AI or Human.
-function parse(input) {
-  return input
-    .split(/^===\s*$/m)
-    .map((block) => block.trim())
-    .filter(Boolean)
-    .map((block, i) => {
-      const [first, ...rest] = block.split("\n");
-      const label = first.trim().toLowerCase();
-      if (label !== "ai" && label !== "human") {
-        throw new Error(`Post ${i + 1} doesn't start with a line saying AI or Human.`);
-      }
-      return { label: label === "ai" ? "AI" : "Human", text: rest.join("\n").trim() };
-    });
-}
-
 // The model the extension uses now, through the background worker.
 async function currentScore(text) {
   const result = await chrome.runtime.sendMessage({ type: "detect", text, images: [] });
