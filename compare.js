@@ -8,15 +8,17 @@ env.backends.onnx.wasm.wasmPaths = {
 const LARGE_MODEL = "GabeuxDev/ai-text-detector-v1.01-onnx";
 const THRESHOLDS = [0.5, 0.7, 0.9];
 
+// parse() (parse.js), aiStyle() (style.js), and aiVerdict() and detectableText() (rules.js)
+// are plain scripts that compare.html loads first.
 const $ = (id) => document.getElementById(id);
 const status = (text) => ($("status").textContent = text);
 const percent = (score) => (score == null ? "–" : `${Math.round(score * 100)}%`);
 
-// The model the extension uses now, through the background worker.
-async function currentScore(text) {
+// The model the extension uses now, through the background worker: { score, isAI }.
+async function currentResult(text) {
   const result = await chrome.runtime.sendMessage({ type: "detect", text, images: [] });
   if (!result) throw new Error("The current model failed. Check the service worker console.");
-  return result.score;
+  return result;
 }
 
 let large;
@@ -75,6 +77,26 @@ function summarizeStyle(rows) {
   );
 }
 
+// What the extension decides (aiVerdict in rules.js): the current model's own verdict, the
+// style rules, or the middle band. Posts here have no images, so the band always applies.
+// Skipped posts (see the run loop) count as not flagged, as they are in the feed.
+function summarizeCombined(rows) {
+  const count = (label, rs = rows) => rs.filter((r) => r.label === label).length;
+  const flagged = (label, only) => rows.filter((r) => r.label === label && (only ? r.verdict === only : r.verdict)).length;
+  const skipped = rows.filter((r) => r.skipped);
+  const div = document.createElement("div");
+  div.innerHTML = "<b>Current model and style rules together</b> (what the extension decides)";
+  $("summary").append(
+    div,
+    ...[
+      `Catches ${flagged("AI")} of ${count("AI")} AI posts, wrongly flags ${flagged("Human")} of ${count("Human")} human posts ` +
+        `(the middle band adds ${flagged("AI", "band")} AI and ${flagged("Human", "band")} human)`,
+      `Skipped ${skipped.length} of ${rows.length} posts (${count("AI", skipped)} AI, ${count("Human", skipped)} human) ` +
+        `that the extension doesn't check: under ${MIN_TEXT_LENGTH} characters or not mostly Latin letters`,
+    ].map((textContent) => Object.assign(document.createElement("div"), { textContent }))
+  );
+}
+
 const styleCell = ({ points, hits }) => (points >= STYLE_MIN_POINTS ? `AI-style: ${hits.join(", ")}` : hits.join(", ") || "–");
 
 function render(rows) {
@@ -108,7 +130,12 @@ $("run").addEventListener("click", async () => {
     for (const [i, row] of rows.entries()) {
       status(`Scoring post ${i + 1} of ${rows.length}…`);
       let start = performance.now();
-      row.current = await currentScore(row.text);
+      const result = await currentResult(row.text);
+      row.current = result.score;
+      // Like content.js: a post under 200 characters or not mostly Latin gets no style check and
+      // no text score, and with no images it isn't checked at all, so it's never flagged.
+      row.skipped = !detectableText(row.text);
+      row.verdict = row.skipped ? "" : aiVerdict(row.style.points, result, false); // sent without images
       timed(i, "current", start);
       if (useLarge) {
         start = performance.now();
@@ -121,6 +148,7 @@ $("run").addEventListener("click", async () => {
     summarize(rows, "current", "Current model", perPost("current"));
     if (useLarge) summarize(rows, "large", "Large model", perPost("large"));
     summarizeStyle(rows);
+    summarizeCombined(rows);
     status(`Done: ${rows.length} posts scored.`);
   } catch (err) {
     status(err.message);
