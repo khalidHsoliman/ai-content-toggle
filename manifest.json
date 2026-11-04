@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Content Toggle",
-  "version": "1.3",
+  "version": "1.4",
   "description": "Hide AI-generated posts and ads on LinkedIn.",
   "permissions": ["storage"],
   "host_permissions": [
