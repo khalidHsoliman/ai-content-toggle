@@ -6,9 +6,75 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 // rules.js is a plain script (no exports), so run it as one here and read its globals back.
-vm.runInThisContext(fs.readFileSync(path.join(__dirname, "..", "rules.js"), "utf8"), { filename: "rules.js" });
+// style.js first, as in the manifest: aiVerdict uses its STYLE_MIN_POINTS.
+for (const file of ["style.js", "rules.js"]) {
+  vm.runInThisContext(fs.readFileSync(path.join(__dirname, "..", file), "utf8"), { filename: file });
+}
 const { needsAICheck, needsAdCheck, adVerdict, retry, isPromotedLabel, isMostlyLatin, detectableText, pickMedia } =
   vm.runInThisContext("({ needsAICheck, needsAdCheck, adVerdict, retry, isPromotedLabel, isMostlyLatin, detectableText, pickMedia })");
+const { aiVerdict, BAND_MIN_SCORE, BAND_MIN_POINTS, STYLE_MIN_POINTS } =
+  vm.runInThisContext("({ aiVerdict, BAND_MIN_SCORE, BAND_MIN_POINTS, STYLE_MIN_POINTS })");
+
+// A reply from background.js. Its THRESHOLD (0.9) decides isAI; these tests only see the result.
+const reply = (score) => ({ score, isAI: score >= 0.9 });
+const TEXT_ONLY = false;
+const WITH_IMAGES = true;
+
+test("aiVerdict: the band is a score of 0.5 or more with 2 or more style points; 3 points flag alone", () => {
+  assert.equal(BAND_MIN_SCORE, 0.5);
+  assert.equal(BAND_MIN_POINTS, 2);
+  assert.equal(STYLE_MIN_POINTS, 3);
+});
+
+test("aiVerdict: 3+ style points flag with no model score at all, so the models are skipped", () => {
+  assert.equal(aiVerdict(3, null), "style");
+  assert.equal(aiVerdict(7, null), "style");
+  // Style wins whatever the model says, and with or without images.
+  assert.equal(aiVerdict(3, reply(0.1), WITH_IMAGES), "style");
+  assert.equal(aiVerdict(3, reply(0.95), TEXT_ONLY), "style");
+});
+
+test("aiVerdict: with no model score (not sent, downloading, failed), fewer than 3 points never flag", () => {
+  for (const points of [0, 1, 2]) {
+    assert.equal(aiVerdict(points, null), "", `${points} points`);
+    assert.equal(aiVerdict(points, null, TEXT_ONLY), "", `${points} points, text only`);
+    assert.equal(aiVerdict(points, undefined, TEXT_ONLY), "", `${points} points, undefined result`);
+  }
+});
+
+test("aiVerdict: at 0.9 the model flags on its own, with no style points, with or without images", () => {
+  assert.equal(aiVerdict(0, reply(0.9), TEXT_ONLY), "model");
+  assert.equal(aiVerdict(0, reply(0.9), WITH_IMAGES), "model");
+  assert.equal(aiVerdict(2, reply(0.99), TEXT_ONLY), "model"); // the clear case, not the band
+  // The 0.9 itself lives in background.js: aiVerdict trusts isAI, whatever the score.
+  assert.equal(aiVerdict(0, { score: 0.5, isAI: true }, TEXT_ONLY), "model");
+  assert.equal(aiVerdict(0, { score: 0.95, isAI: false }, TEXT_ONLY), "");
+});
+
+test("aiVerdict: just under 0.9, 2 style points flag through the band and 1 doesn't", () => {
+  assert.equal(aiVerdict(2, reply(0.89), TEXT_ONLY), "band");
+  assert.equal(aiVerdict(1, reply(0.89), TEXT_ONLY), "");
+  assert.equal(aiVerdict(0, reply(0.89), TEXT_ONLY), "");
+});
+
+test("aiVerdict: the band starts at exactly 0.5", () => {
+  assert.equal(aiVerdict(2, reply(0.5), TEXT_ONLY), "band");
+  assert.equal(aiVerdict(2, reply(0.49), TEXT_ONLY), "");
+  assert.equal(aiVerdict(2, reply(0.4999), TEXT_ONLY), "");
+  assert.equal(aiVerdict(1, reply(0.5), TEXT_ONLY), "");
+});
+
+test("aiVerdict: no band for posts sent with images, whose score may be an image's", () => {
+  assert.equal(aiVerdict(2, reply(0.7), WITH_IMAGES), "");
+  assert.equal(aiVerdict(2, reply(0.5), WITH_IMAGES), "");
+  assert.equal(aiVerdict(2, reply(0.89), WITH_IMAGES), "");
+});
+
+test("aiVerdict: low scores and no style points don't flag", () => {
+  assert.equal(aiVerdict(0, reply(0), TEXT_ONLY), "");
+  assert.equal(aiVerdict(2, reply(0.1), TEXT_ONLY), "");
+  assert.equal(aiVerdict(1, reply(0.7), TEXT_ONLY), "");
+});
 
 test("needsAICheck: a post without data-ai is due for a check, even while the models wait", () => {
   // The style check doesn't need the models, so new posts are never held back.

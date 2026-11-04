@@ -61,9 +61,11 @@ async function check(post) {
   const textBox = [...post.querySelectorAll(POST_TEXT)].find((el) => !el.closest(COMMENT));
   const rawText = textBox?.innerText.trim() ?? "";
   const text = detectableText(rawText);
-  // ChatGPT-style formatting (see style.js) flags a post without running the models.
+  // ChatGPT-style formatting (see style.js) flags a post without running the models:
+  // with no model result yet, aiVerdict (rules.js) goes by style points alone.
   const style = text ? aiStyle(rawText) : null;
-  if (style?.points >= STYLE_MIN_POINTS) {
+  const points = style?.points ?? 0;
+  if (aiVerdict(points, null)) {
     post.dataset.aiStyle = style.hits.join(", "); // shown on the collapsed bar
     post.dataset.ai = "yes";
     return;
@@ -81,9 +83,12 @@ async function check(post) {
     const result = await chrome.runtime.sendMessage({ type: "detect", text, images });
     if (!result) throw new Error("detection failed");
     retry.reset();
-    post.dataset.ai = result.isAI ? "yes" : "no";
+    // The model's own verdict, or the middle band: a middling score plus some style points.
+    const verdict = aiVerdict(points, result, images.length > 0);
+    post.dataset.ai = verdict ? "yes" : "no";
     post.dataset.aiScore = result.score.toFixed(2); // visible in DevTools when tuning
     post.dataset.aiPercent = Math.round(result.score * 100); // shown on the collapsed bar
+    if (verdict === "band") post.dataset.aiBand = style.hits.join(", "); // shown next to the percent
   } catch (err) {
     if (!chrome.runtime?.id) return; // extension was reloaded or updated; this tab needs a refresh
     console.warn("AI Content Toggle:", err);

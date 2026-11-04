@@ -1,10 +1,15 @@
 // The decisions content.js makes about a post, kept free of DOM access so they can be
-// tested with `node --test` (see test/). Loaded before content.js, like style.js.
+// tested with `node --test` (see test/). Loaded after style.js and before content.js.
 
 const PROMOTED = /^Promoted( by .+)?$/; // LinkedIn's English label on ad posts
 
 const MIN_TEXT_LENGTH = 200; // text detectors are unreliable on short posts
 const MAX_IMAGES = 3;
+
+// The middle band: a text model score from BAND_MIN_SCORE up to the model's own threshold
+// (THRESHOLD in background.js, which owns it) flags a post with BAND_MIN_POINTS style points.
+const BAND_MIN_SCORE = 0.5;
+const BAND_MIN_POINTS = 2;
 
 const RETRY_DELAY = 10_000; // after a failed check, wait this long before sending more posts...
 const MAX_RETRY_DELAY = 10 * 60_000; // ...doubling while checks keep failing, up to this
@@ -15,6 +20,22 @@ const MAX_RETRY_DELAY = 10 * 60_000; // ...doubling while checks keep failing, u
 function needsAICheck(dataset, canRetry, adsHidden) {
   if (adsHidden && dataset.ad === "yes") return false;
   return !dataset.ai || (dataset.ai === "error" && canRetry);
+}
+
+// Why a post counts as AI, or "" when it doesn't:
+//   "style": STYLE_MIN_POINTS (style.js) or more style points, so the models aren't needed
+//   "model": the model is sure on its own (isAI, decided by THRESHOLD in background.js)
+//   "band":  a middling score plus some style points (see BAND_MIN_SCORE above)
+// result is the model's reply, { score, isAI }, or null when there is none yet (not sent,
+// still downloading, failed): then style points alone decide, as they always have.
+// background.js replies with the highest of the text and image scores, so the band only
+// applies to posts sent without images, where the score is the text model's.
+function aiVerdict(points, result, hasImages) {
+  if (points >= STYLE_MIN_POINTS) return "style";
+  if (!result) return "";
+  if (result.isAI) return "model";
+  if (!hasImages && points >= BAND_MIN_POINTS && result.score >= BAND_MIN_SCORE) return "band";
+  return "";
 }
 
 // The wait after a failed check, so the models aren't retried every second while they're

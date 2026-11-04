@@ -15,6 +15,10 @@ html.hide-ai [data-ai="yes"]:not([data-revealed])::before {
 html.hide-ai [data-ai="yes"][data-ai-style]:not([data-revealed])::before {
   content: "AI-style post (" attr(data-ai-style) ") · Click to show" !important;
 }
+/* Flagged by the middle band (rules.js): a middling score plus some formatting signals. */
+html.hide-ai [data-ai="yes"][data-ai-band]:not([data-revealed])::before {
+  content: "Likely AI post (" attr(data-ai-percent) "%, " attr(data-ai-band) ") · Click to show" !important;
+}
 
 /* "Hide ads" switch: Promoted posts, sidebar ads and Premium upsells. */
 html.hide-ads [data-ad="yes"],

@@ -1,5 +1,6 @@
 // Checks the content.js wiring that the node --test suite can't reach: the retry wait,
-// style flags during the wait, ads walked once, late-filled ads, and hidden ads skipping the model.
+// style flags during the wait, ads walked once, late-filled ads, hidden ads skipping the model,
+// and the middle band (aiVerdict in rules.js) before and after the model.
 // Runs style.js, rules.js and content.js together with a fake page, clock and chrome API.
 // Usage: node verify-wiring.js /workspace/ai-content-toggle
 const fs = require("fs"), path = require("path"), vm = require("vm");
@@ -10,10 +11,11 @@ const long = "plain made up words about garden sheds and weekend plans ".repeat(
 const styled = "**Key takeaways** from my made up week:\n" + long;
 const leaf = (text) => ({ children: [], textContent: text, closest: () => null });
 
-function post({ text = long, labels = ["Made Up Name"], onScreen = true } = {}) {
+function post({ text = long, labels = ["Made Up Name"], onScreen = true, images = [] } = {}) {
   const p = { dataset: {}, text, els: labels.map(leaf), onScreen, walks: 0 };
   p.querySelectorAll = (sel) => {
     if (sel === "*") return p.walks++, p.els;
+    if (sel === "img") return images.map((src) => ({ src }));
     if (sel.includes("expandable") && p.text) return [{ innerText: p.text, closest: () => null }];
     return [];
   };
@@ -21,7 +23,8 @@ function post({ text = long, labels = ["Made Up Name"], onScreen = true } = {}) 
   return p;
 }
 
-// One fresh page per scenario. model: (now) => true (works) or false (fails).
+// One fresh page per scenario. model: (now, message) => true (works, score 0.1), false (fails),
+// or the reply itself, like { score: 0.7, isAI: false }.
 function page(posts, settings, model) {
   let now = 0, tick, onChange;
   const sent = [];
@@ -53,7 +56,11 @@ function page(posts, settings, model) {
       disconnect() { watching.clear(); }
     },
     chrome: {
-      runtime: { id: "x", sendMessage: async (m) => (sent.push({ t: now / 1000, m }), model(now) ? { isAI: false, score: 0.1 } : null) },
+      runtime: { id: "x", sendMessage: async (m) => {
+        sent.push({ t: now / 1000, m });
+        const reply = model(now, m);
+        return reply === true ? { isAI: false, score: 0.1 } : reply || null;
+      } },
       storage: { local: { get: async () => ({ ...settings }) }, onChanged: { addListener: (fn) => (onChange = fn) } },
     },
     __now: () => now,
@@ -158,6 +165,32 @@ const rounds = (sent) => [...new Set(sent.map((s) => s.t))];
     await p.change({ hideAds: false });
     await p.run(2);
     check("with Hide ads off, the ad is checked by the model", ad.dataset.ai === "no", `ad data-ai=${ad.dataset.ai}`);
+  }
+
+  // 7. The middle band: a 0.7 score flags a text-only post with 2 style points, not one with 1
+  //    point or one sent with images; the model flags alone at 0.9+; 3+ points skip the model.
+  {
+    const twoPoints = long + "\nIs it worth it — really?"; // em dash + closing question
+    const band = post({ text: twoPoints });
+    const onePoint = post({ text: long + "\nIs it worth it?" });
+    const withImage = post({ text: twoPoints, images: ["https://media.licdn.com/dms/image/v2/x/feedshare-shrink_800/0/1"] });
+    const sure = post({ text: long + " sure" });
+    const styledPost = post({ text: styled });
+    const p = page([band, onePoint, withImage, sure, styledPost], { hideAI: true },
+      (now, m) => (m.text.endsWith("sure") ? { score: 0.95, isAI: true } : { score: 0.7, isAI: false }));
+    await p.start(); await p.run(2);
+    const d = band.dataset;
+    check("band: 0.7 + 2 style points flags, bar shows percent and signals",
+      d.ai === "yes" && String(d.aiPercent) === "70" && d.aiBand === "em dash, closing question" && !d.aiStyle,
+      `data-ai=${d.ai}, percent=${d.aiPercent}, band=${d.aiBand}, style=${d.aiStyle}`);
+    check("band: 0.7 + 1 style point isn't flagged", onePoint.dataset.ai === "no" && !onePoint.dataset.aiBand, `data-ai=${onePoint.dataset.ai}`);
+    const sentImages = p.sent.find((x) => x.m.text === withImage.text && x.m.images.length === 1);
+    check("band: not for a post sent with images", !!sentImages && withImage.dataset.ai === "no" && !withImage.dataset.aiBand,
+      `sent with image: ${!!sentImages}, data-ai=${withImage.dataset.ai}`);
+    check("model sure on its own (isAI) flags without band signals", sure.dataset.ai === "yes" && !sure.dataset.aiBand && !sure.dataset.aiStyle,
+      `data-ai=${sure.dataset.ai}, band=${sure.dataset.aiBand}`);
+    check("3+ style points still skip the model", styledPost.dataset.ai === "yes" && !!styledPost.dataset.aiStyle && !p.sent.some((x) => x.m.text === styled),
+      `data-ai=${styledPost.dataset.ai}, sent=${p.sent.some((x) => x.m.text === styled)}`);
   }
 
   for (const r of results) console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.name}${r.ok ? "" : "  (" + r.detail + ")"}`);
