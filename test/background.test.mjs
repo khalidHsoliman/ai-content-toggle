@@ -320,3 +320,24 @@ test("background: flipping Hide AI or Hide ads ends the wait; other storage chan
   assert.deepEqual(await send({ images: ["a.jpg"] }), { score: P(0), isAI: false, textScore: null });
   assert.equal(downloads("image"), 3);
 });
+
+test("background: the badge follows Hide AI and Hide ads, and ignores the worker's own wait writes", async (t) => {
+  const { send, browser: b } = await worker(t);
+  const settle = () => new Promise((r) => setTimeout(r, 1));
+  fake.imageOffline = true;
+  assert.equal(await send({ images: ["a.jpg"] }), null); // writes the wait to storage.session
+  await settle();
+  assert.ok(b.data.modelWaits.image);
+  b.flip("someOtherKey");
+  await settle();
+  assert.deepEqual(b.badges, []); // neither the session write nor another key touched the badge
+  b.flip("hideAI"); // on
+  await settle();
+  b.flip("hideAds"); // on
+  await settle();
+  b.flip("hideAI"); // off, Hide ads still on
+  await settle();
+  b.flip("hideAds"); // off
+  await settle();
+  assert.deepEqual(b.badges, ["ON", "ON", "ON", ""]);
+});

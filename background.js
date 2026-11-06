@@ -28,7 +28,9 @@ async function updateBadge() {
   const { hideAI, hideAds } = await chrome.storage.local.get(["hideAI", "hideAds"]);
   chrome.action.setBadgeText({ text: hideAI || hideAds ? "ON" : "" });
 }
-chrome.storage.onChanged.addListener(updateBadge);
+chrome.storage.onChanged.addListener((changes) => {
+  if (flippedSwitch(changes)) updateBadge();
+});
 chrome.runtime.onStartup.addListener(updateBadge);
 chrome.runtime.onInstalled.addListener(updateBadge);
 
