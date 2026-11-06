@@ -63,7 +63,9 @@ async function imageScore(url) {
   });
   const [processor, model] = await imageModel; // a failed download rejects: detect.js fails the post
   // An image that can't be fetched (dead link, expired URL) is skipped, not retried: null.
+  // Unless the browser is offline: then it fails like a failed download and the post is retried.
   const image = await RawImage.fromURL(url).catch((err) => {
+    if (!navigator.onLine) throw err;
     console.warn("AI Content Toggle: skipping an image that can't be fetched", url, err);
     return null;
   });
