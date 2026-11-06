@@ -12,7 +12,9 @@ Chrome extension (Manifest V3) that hides AI-generated LinkedIn posts, using on-
 ## Files
 
 - `manifest.json`: version, permissions, content script, popup.
-- `background.js`: service worker. Badge, model loading, detection (one at a time), keep-alive during downloads. `detect()` replies `{ score, isAI, textScore }`: `score` is the highest of the text and image scores, `isAI` is `score >= THRESHOLD`, `textScore` is the text model's alone (null when no text was sent).
+- `background.js`: service worker. Badge (reacts only to `hideAI`/`hideAds` changes), model loading, image fetch (a dead link is skipped; offline, the post fails and is retried), the shared wait checked before any model runs, detection one at a time, keep-alive during downloads. Model names, dtype and preprocessing live here.
+- `detect.js`: `detect()` and `THRESHOLD`, with the scorers passed in so node can test them. Replies `{ score, isAI, textScore }`: `score` is the highest of the text and image scores, `isAI` is `score >= THRESHOLD`, `textScore` is the text model's alone (null when no text was sent). A rejected score fails the post (background.js replies null, content.js retries); a null image score (dead link) is skipped.
+- `wait.js`: the retry wait after a model fails, one per model ("text", "image"), 10 s doubling to 10 min, kept in `chrome.storage.session` so all tabs share it and it survives worker restarts. Flipping `hideAI`/`hideAds` resets it. Each tab also has its own wait (`retry` in `rules.js`).
 - `style.js`: rules for ChatGPT-style LinkedIn formatting (markdown, arrow bullets, em dashes, stock phrases…). Loaded before `content.js` and by the compare page.
 - `rules.js`: content.js's decisions without DOM access: what needs an AI or ad check, the AI verdict (`aiVerdict`, including the middle band), the ad verdict, the retry wait after failed checks (10 s doubling to 10 min), the Promoted label, which text and media to send. Loaded after `style.js`, before `content.js`.
 - `content.js`: finds posts, flags AI-style posts itself (`data-ai-style`), sends the rest for detection, marks posts with `data-ai` / `data-ad`, handles click-to-show on collapsed posts.
@@ -21,10 +23,11 @@ Chrome extension (Manifest V3) that hides AI-generated LinkedIn posts, using on-
 - `compare.html` / `compare.js`: accuracy test page. Scores labeled posts with the current model, the style rules, both together as the extension decides, and optionally the large model. Also counts the posts the extension would skip.
 - `parse.js`: reads the labeled-post format (`AI`/`Human` line, posts separated by `===`). Used by the compare page and `scripts/score.js`.
 - `scripts/score.js`: scores a labeled-post file with the style rules, without a browser or models (`node scripts/score.js posts.txt`). `scripts/sample-posts.txt` has made-up examples.
-- `test/`: `node --test` suites for `rules.js`, `style.js`, `parse.js` and `scripts/score.js` (68 tests, no dependencies). All fixtures are made up.
+- `test/`: `node --test` suites for `rules.js`, `style.js`, `parse.js`, `scripts/score.js`, `detect.js`, `wait.js` and `background.js` (108 tests, no dependencies). `background.test.mjs` loads the real `background.js` next to a stand-in `lib/` in a temp folder. Needs Node 20.19+ (22.7+ on Node 22). All fixtures are made up.
 - `verify-wiring.js`: runs `style.js`, `rules.js` and `content.js` together on a fake page, clock and chrome API (`node verify-wiring.js`, 22 checks).
 - `verify-band.js`: end-to-end check of the style-rule fixes and the middle band (`node verify-band.js`, 31 checks).
-- Keep `verify-wiring.js` and `verify-band.js` out of `test/`, or `node --test` picks them up.
+- `verify-worker.js`: end-to-end check of the service worker: the real `content.js` in fake tabs against the real `background.js` with a fake `lib/` (`node verify-worker.js`, 10 checks).
+- Keep `verify-wiring.js`, `verify-band.js` and `verify-worker.js` out of `test/`, or `node --test` picks them up.
 - `lib/`: vendored Transformers.js 4.3.1 and ONNX Runtime Web 1.31.0-dev.20260914 (asyncify WASM) with their licenses. Don't edit these files.
 
 ## Models
@@ -32,7 +35,7 @@ Chrome extension (Manifest V3) that hides AI-generated LinkedIn posts, using on-
 - Text: `MedAliFarhat/ai-text-detector-onnx` (RoBERTa, q8, English only). Labels: 0 = Human, 1 = AI. Truncate at 512 tokens. It was trained on single-line text, so `textScore` applies NFKC and collapses whitespace first; without that it missed most AI posts on LinkedIn.
 - Image: `buildborderless/CommunityForensics-DeepfakeDet-ViT`, the corrected July 2026 release. Older copies, including the onnx-community export, have wrong weights. Preprocessing: shortest edge 440, center crop 384. One logit, so apply a sigmoid.
 - Candidate large text model (compare page only): `GabeuxDev/ai-text-detector-v1.01-onnx` (DeBERTa-v3-large, about 1.7 GB fp32, WebGPU only, max 768 tokens).
-- `THRESHOLD` in `background.js` is 0.9. `STYLE_MIN_POINTS` in `style.js` is 3.
+- `THRESHOLD` in `detect.js` is 0.9. `STYLE_MIN_POINTS` in `style.js` is 3.
 - A post is flagged if the style points reach `STYLE_MIN_POINTS` (then the models are skipped), if the model score is at least `THRESHOLD`, or by the middle band: a text score (`textScore`) of at least `BAND_MIN_SCORE` (0.5) with at least `BAND_MIN_POINTS` (2) style points. The band applies to every post, with or without images, and an image score never triggers it; no text score means no band. The band bar still shows the highest score. `aiVerdict` in `rules.js` decides all three.
 - Style weights: markdown 3, arrow bullets 2, stock phrases 2, em dash 1, Unicode bold 1, short lines 1, closing question 1, numbered list 1. Plain • dots, ▪ ▫ squares and © ® ™ don't count as bullets. "Thoughts?"/"Agree?" count only at the start of a line, or as "your thoughts?".
 
@@ -52,8 +55,8 @@ Chrome extension (Manifest V3) that hides AI-generated LinkedIn posts, using on-
 - `chrome-extension://invalid` errors in LinkedIn's console come from LinkedIn probing for extensions. Ignore them.
 - GitHub push protection flags a gist ID in `lib/transformers.min.js` as a Mistral API key. It's a false positive.
 - Keep the git tag, the release title and the manifest version in sync.
-- Before committing, run `node --test`, `node verify-wiring.js` and `node verify-band.js`.
-- Releases: `gh` is logged in. Build `ai-content-toggle.zip` with `git -c core.autocrlf=false archive --prefix=ai-content-toggle/` from the release commit, leaving out `CLAUDE.md`, `test/`, `scripts/`, `verify-wiring.js`, `verify-band.js` and `.gitignore`. Without `core.autocrlf=false`, git on this machine (autocrlf is true) writes CRLF line endings into the zip; the v1.2 and v1.3 zips have them, which Chrome doesn't mind. Release notes follow the format of earlier releases (What's changed, Install, Updating from the previous version).
+- Before committing, run `node --test`, `node verify-wiring.js`, `node verify-band.js` and `node verify-worker.js`.
+- Releases: `gh` is logged in. Build `ai-content-toggle.zip` with `git -c core.autocrlf=false archive --prefix=ai-content-toggle/` from the release commit, leaving out `CLAUDE.md`, `test/`, `scripts/`, `verify-wiring.js`, `verify-band.js`, `verify-worker.js` and `.gitignore` (keep `parse.js`, `detect.js` and `wait.js`: the extension loads them). Without `core.autocrlf=false`, git on this machine (autocrlf is true) writes CRLF line endings into the zip; the v1.2 and v1.3 zips have them, which Chrome doesn't mind. Release notes follow the format of earlier releases (What's changed, Install, Updating from the previous version).
 
 ## Status and next steps
 
