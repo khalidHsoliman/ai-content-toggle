@@ -7,7 +7,7 @@ const MIN_TEXT_LENGTH = 200; // text detectors are unreliable on short posts
 const MAX_IMAGES = 3;
 
 // The middle band: a text model score from BAND_MIN_SCORE up to the model's own threshold
-// (THRESHOLD in background.js, which owns it) flags a post with BAND_MIN_POINTS style points.
+// (THRESHOLD in detect.js, which owns it) flags a post with BAND_MIN_POINTS style points.
 const BAND_MIN_SCORE = 0.5;
 const BAND_MIN_POINTS = 2;
 
@@ -24,7 +24,7 @@ function needsAICheck(dataset, canRetry, adsHidden) {
 
 // Why a post counts as AI, or "" when it doesn't:
 //   "style": STYLE_MIN_POINTS (style.js) or more style points, so the models aren't needed
-//   "model": the model is sure on its own (isAI, decided by THRESHOLD in background.js)
+//   "model": the model is sure on its own (isAI, decided by THRESHOLD in detect.js)
 //   "band":  a middling score plus some style points (see BAND_MIN_SCORE above)
 // result is the model's reply, { score, isAI, textScore }, or null when there is none yet
 // (not sent, still downloading, failed): then style points alone decide, as they always have.

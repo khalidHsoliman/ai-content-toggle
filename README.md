@@ -38,11 +38,11 @@ A post flagged as AI collapses into a one-line bar. Click the bar to see the pos
 
 Ads are hidden completely.
 
-The first time it runs, it downloads two models from Hugging Face (about 210 MB in total), so the first posts take a while to check. After that, the models are cached in the browser. If a model download fails, the extension waits before trying again (10 seconds, doubling up to 10 minutes while it keeps failing); flip either switch off and on to retry right away.
+The first time it runs, it downloads two models from Hugging Face (about 210 MB in total), so the first posts take a while to check. After that, the models are cached in the browser. If a model download fails, the extension waits before trying again (10 seconds, doubling up to 10 minutes while it keeps failing); flip either switch off and on to retry right away. The wait is shared by all your LinkedIn tabs and kept for each model separately, so a failing image model doesn't stop text posts from being checked. A tab whose own image posts keep failing does hold its new posts until its next retry.
 
 ## Accuracy
 
-AI detectors are evidence, not proof. Expect some human-written posts to be hidden (especially polished writing, influencer-style formatting or designed graphics) and many AI posts to slip through, especially ones a person has edited. A post is hidden by the detector only when a model is at least 90% confident. Between 50% and that, it takes some ChatGPT-style formatting as well. You can change this with `THRESHOLD` in `background.js`, the formatting rules with `STYLE_MIN_POINTS` in `style.js`, and the in-between rule with `BAND_MIN_SCORE` and `BAND_MIN_POINTS` in `rules.js`.
+AI detectors are evidence, not proof. Expect some human-written posts to be hidden (especially polished writing, influencer-style formatting or designed graphics) and many AI posts to slip through, especially ones a person has edited. A post is hidden by the detector only when a model is at least 90% confident. Between 50% and that, it takes some ChatGPT-style formatting as well. You can change this with `THRESHOLD` in `detect.js`, the formatting rules with `STYLE_MIN_POINTS` in `style.js`, and the in-between rule with `BAND_MIN_SCORE` and `BAND_MIN_POINTS` in `rules.js`.
 
 In a test on 226 human LinkedIn posts from before ChatGPT existed, about 9% were wrongly flagged (6% by the detector, 4% by the formatting rules). About half of 80 AI-written LinkedIn posts were caught. The test set is small, so treat these numbers as rough. They were measured before the formatting rules were retuned and the in-between rule was added.
 
@@ -56,7 +56,7 @@ To tune the formatting rules without a browser, save posts in the same format to
 
 LinkedIn changes its page structure often. If posts stop being checked, update the selectors at the top of `content.js` (`POST` and `POST_TEXT`) to match the current markup. If ads come back, update `PROMOTED` in `rules.js` or the ad rules in `styles.css`.
 
-The rules in `rules.js` and `style.js`, and the scoring script, have tests: run `node --test` in this folder (Node 20 or later, nothing to install).
+The rules in `rules.js` and `style.js`, how `detect.js` turns model scores into a verdict, the background worker (with a stand-in for `lib/`), and the scoring script have tests: run `node --test` in this folder (nothing to install). They need Node 20.19 or later (22.7 or later on Node 22).
 
 ## Privacy
 

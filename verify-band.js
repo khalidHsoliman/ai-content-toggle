@@ -61,7 +61,7 @@ const long = "We moved the made up workshop to a bigger shed this spring and spe
   // ---------- 2. aiVerdict in rules.js ----------
   const r = load(["style.js", "rules.js"]);
   const aiVerdict = g(r, "aiVerdict");
-  // Replies built like detect() in background.js: score is the highest, textScore the text model's.
+  // Replies built like detect() in detect.js: score is the highest, textScore the text model's.
   const R = (score, isAI = score >= 0.9) => ({ score, isAI, textScore: score }); // sent without images
   const RI = (text, image) => ({ score: Math.max(text, image), isAI: Math.max(text, image) >= 0.9, textScore: text });
   check("aiVerdict exists", () => typeof aiVerdict === "function" || { detail: "not defined" });

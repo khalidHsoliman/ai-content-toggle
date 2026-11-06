@@ -169,7 +169,7 @@ const rounds = (sent) => [...new Set(sent.map((s) => s.t))];
 
   // 7. The middle band: a 0.7 text score flags a post with 2 style points, not one with 1 point;
   //    with an image, the text score decides, never the image's; the model flags alone at 0.9+;
-  //    3+ points skip the model. Replies are built like detect() in background.js.
+  //    3+ points skip the model. Replies are built like detect() in detect.js.
   {
     const twoPoints = long + "\nIs it worth it — really?"; // em dash + closing question
     const media = "https://media.licdn.com/dms/image/v2/x/feedshare-shrink_800/0/1";

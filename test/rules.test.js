@@ -15,7 +15,7 @@ const { needsAICheck, needsAdCheck, adVerdict, retry, isPromotedLabel, isMostlyL
 const { aiVerdict, BAND_MIN_SCORE, BAND_MIN_POINTS, STYLE_MIN_POINTS } =
   vm.runInThisContext("({ aiVerdict, BAND_MIN_SCORE, BAND_MIN_POINTS, STYLE_MIN_POINTS })");
 
-// Replies from background.js, built the way detect() builds them. Its THRESHOLD (0.9) decides
+// Replies from background.js, built the way detect() (detect.js) builds them. Its THRESHOLD (0.9) decides
 // isAI from score, the highest of the text and image scores; textScore is the text model's alone.
 const verdictOf = (score, textScore) => ({ score, isAI: score >= 0.9, textScore });
 const reply = (text) => verdictOf(text, text); // a post sent without images
@@ -48,7 +48,7 @@ test("aiVerdict: at 0.9 the model flags on its own, with no style points, with o
   assert.equal(aiVerdict(0, withImage(0.1, 0.9)), "model"); // an image score this high still flags alone
   assert.equal(aiVerdict(0, imageOnly(0.95)), "model");
   assert.equal(aiVerdict(2, reply(0.99)), "model"); // the clear case, not the band
-  // The 0.9 itself lives in background.js: aiVerdict trusts isAI, whatever the score.
+  // The 0.9 itself lives in detect.js: aiVerdict trusts isAI, whatever the score.
   assert.equal(aiVerdict(0, { score: 0.5, isAI: true, textScore: 0.5 }), "model");
   assert.equal(aiVerdict(0, { score: 0.95, isAI: false, textScore: 0.95 }), "");
 });
