@@ -162,7 +162,16 @@ loadSettings();
 chrome.storage.onChanged.addListener(loadSettings);
 // LinkedIn adds posts as you scroll. After the extension is reloaded or updated, this old
 // copy of the script can't reach it anymore, so it stops quietly until the tab is refreshed.
+// It also ends Show all when LinkedIn has moved to another page (another path: not a change of
+// just the ?query or #hash), before scanning, so the new page's posts come in collapsed.
+// (document.location is the page's location; the fake pages in the verify scripts have none.)
+const pagePath = () => document.location?.pathname;
+let shownPath = pagePath();
 const timer = setInterval(() => {
   if (!chrome.runtime?.id) return clearInterval(timer);
+  if (pagePath() !== shownPath) {
+    shownPath = pagePath();
+    if (showAll) setShowAll(false);
+  }
   if (hideAI || hideAds) scan();
 }, 1000);
