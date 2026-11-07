@@ -10,7 +10,6 @@ const COMMENT = '[componentkey*="urn:li:comment"]'; // comments use the same tex
 
 let hideAI = false;
 let hideAds = false;
-
 // Check each post once, when it scrolls near the screen (so its images have loaded).
 const io = new IntersectionObserver(
   (entries) => {
@@ -108,15 +107,20 @@ function apply(settings) {
   scan();
 }
 
-// A flagged post collapses into a one-line bar (see styles.css); clicking the bar shows it.
+// A flagged post collapses into a one-line bar (see styles.css); clicking the bar shows it, and
+// a thin bar on top of the open post collapses it again. Both bars are the post's ::before, so a
+// click on them targets the post itself. A click inside the post (a link, like, comment) reaches
+// this listener too, but its target is what's in the post, so it's left alone for LinkedIn.
+// styles.css keeps the open post's own padding from taking clicks, leaving just the bar.
 document.addEventListener(
   "click",
   (event) => {
     const post = event.target;
-    if (hideAI && post.matches?.('[data-ai="yes"]:not([data-revealed])')) {
+    if (hideAI && post.matches?.('[data-ai="yes"]')) {
       event.preventDefault();
       event.stopPropagation(); // don't let LinkedIn treat it as a click on the post
-      post.dataset.revealed = "yes";
+      if (post.dataset.revealed) delete post.dataset.revealed;
+      else post.dataset.revealed = "yes";
     }
   },
   true
