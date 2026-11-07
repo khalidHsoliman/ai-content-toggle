@@ -1,6 +1,8 @@
 // Checks the content.js wiring that the node --test suite can't reach: the retry wait,
 // style flags during the wait, ads walked once, late-filled ads, hidden ads skipping the model,
-// and the middle band (aiVerdict in rules.js) before and after the model.
+// the middle band (aiVerdict in rules.js) before and after the model, the popup's counts message,
+// clicking a bar to open a post and collapse it again, the popup's Show all button (and its end
+// when LinkedIn moves to another page), and reshares.
 // Runs style.js, rules.js and content.js together with a fake page, clock and chrome API.
 // Usage: node verify-wiring.js /workspace/ai-content-toggle
 const fs = require("fs"), path = require("path"), vm = require("vm");
@@ -58,7 +60,8 @@ function page(posts, settings, model) {
     console: { log() {}, warn() {} },
     setInterval: (fn) => ((tick = fn), 1),
     clearInterval() {},
-    document: { querySelectorAll: () => posts, documentElement: { classList: { toggle() {} } }, addEventListener() {} },
+    document: { querySelectorAll: () => posts, documentElement: { classList: { toggle() {} } }, addEventListener: (type, fn) => type === "click" && (onClick = fn),
+      location: { pathname: "/feed/", search: "", hash: "" } },
     // Like the browser: the first notification comes after the current task, and a post
     // hidden by styles.css (an ad while Hide ads is on) has no box, so it never intersects.
     IntersectionObserver: class {
@@ -85,7 +88,8 @@ function page(posts, settings, model) {
         const reply = model(now, m);
         return reply === true ? { isAI: false, score: 0.1 } : reply || null;
       }, onMessage: { addListener: (fn) => (onMessage = fn) } },
-      storage: { local: { get: async () => ({ ...settings }) }, onChanged: { addListener: (fn) => (onChange = fn) } },
+      // No set(): content.js must never write to storage (it reloads its settings on every change).
+      storage: { local: { get: async () => ({ ...settings }), set() { throw new Error("content.js wrote to storage"); } }, onChanged: { addListener: (fn) => (onChange = fn) } },
     },
     __now: () => now,
   };
@@ -99,7 +103,21 @@ function page(posts, settings, model) {
     // The browser reporting that a watched post scrolled into view.
     async scrollIn(t) { t.onScreen = true; observer.cb([{ target: t, isIntersecting: !(settings.hideAds && t.dataset.ad === "yes") }]); await flush(); await flush(); },
     async run(seconds) { for (let i = 0; i < seconds; i++) { now += 1000; tick(); await flush(); await flush(); } },
+    // LinkedIn moving to another page without reloading: only the location changes.
+    navigate(to) { Object.assign(ctx.document.location, to); },
     async change(next) { Object.assign(settings, next); onChange(); await flush(); await flush(); },
+    // The popup's message, as chrome.tabs.sendMessage delivers it: { answered, reply, kept } (kept: returned true).
+    // A click, as the capture listener on document sees it: { stopped } (default prevented and stopped).
+    click(target) {
+      let prevented = false, stopped = false;
+      onClick({ target, preventDefault: () => (prevented = true), stopPropagation: () => (stopped = true) });
+      return { stopped: prevented && stopped, untouched: !prevented && !stopped };
+    },
+    ask(message) {
+      let answered = false, reply;
+      const kept = onMessage(message, {}, (r) => ((answered = true), (reply = r)));
+      return { answered, reply, kept };
+    },
   };
 }
 
@@ -226,6 +244,270 @@ const rounds = (sent) => [...new Set(sent.map((s) => s.t))];
       `data-ai=${sure.dataset.ai}, band=${sure.dataset.aiBand}`);
     check("3+ style points still skip the model", styledPost.dataset.ai === "yes" && !!styledPost.dataset.aiStyle && !p.sent.some((x) => x.m.text === styled),
       `data-ai=${styledPost.dataset.ai}, sent=${p.sent.some((x) => x.m.text === styled)}`);
+  }
+
+  // 8. The popup's { type: "counts" } message: content.js answers at once with countPosts() of
+  //    the posts on the page now, marked by content.js itself, and whether Show all is on (off
+  //    here); other messages get no answer.
+  {
+    const styledPost = post({ text: styled });
+    const sure = post({ text: long + " sure" });
+    const band = post({ text: long + "\nIs it worth it — really?" }); // em dash + closing question
+    const human = post();
+    const ad = post({ labels: ["Made Up Name", "Promoted"] });
+    const failing = post({ text: long + " broken" });
+    const slow = post({ text: long + " slow" });
+    const offScreen = post({ onScreen: false });
+    const posts = [styledPost, sure, band, human, ad, failing, slow, offScreen];
+    const p = page(posts, { hideAI: true, hideAds: true }, (now, m) => {
+      if (m.text === sure.text) return { score: 0.95, isAI: true, textScore: 0.95 };
+      if (m.text === band.text) return { score: 0.7, isAI: false, textScore: 0.7 };
+      if (m.text === failing.text) return false;
+      if (m.text === slow.text) return new Promise(() => {}); // never answers: stays "checking"
+      return true;
+    });
+    await p.start(); await p.run(2);
+    const expected = { posts: 8, checked: 4, checking: 1, failed: 1, model: 1, style: 1, band: 1, revealed: 0, ads: 1, showAll: false };
+    let a = p.ask({ type: "counts" });
+    check("counts: answered at once with what content.js marked on the page",
+      a.answered && a.kept !== true && JSON.stringify(a.reply) === JSON.stringify(expected),
+      `answered=${a.answered}, kept=${a.kept}, reply=${JSON.stringify(a.reply)}`);
+    sure.dataset.revealed = "yes"; // what clicking its bar does
+    posts.splice(posts.indexOf(human), 1); // LinkedIn took a post off the page
+    a = p.ask({ type: "counts" });
+    const after = { ...expected, posts: 7, checked: 3, revealed: 1 };
+    check("counts: a revealed post keeps its reason; only posts on the page now count",
+      JSON.stringify(a.reply) === JSON.stringify(after), `reply=${JSON.stringify(a.reply)}`);
+    const other = [p.ask({ type: "detect" }), p.ask(undefined)];
+    check("counts: other messages get no answer", other.every((x) => !x.answered && x.kept !== true),
+      other.map((x) => `answered=${x.answered}`).join(", "));
+  }
+
+  // 9. Clicking the bar: a collapsed post opens, its thin bar on top collapses it again, and the
+  //    counts follow. Clicks inside the post (links, like, comment) are left to LinkedIn.
+  {
+    const flagged = post({ text: styled });
+    const human = post();
+    const p = page([flagged, human], { hideAI: true }, () => true);
+    await p.start(); await p.run(2);
+    const revealed = () => p.ask({ type: "counts" }).reply.revealed;
+    let c = p.click(flagged);
+    check("click: the collapsed bar opens the post, and LinkedIn doesn't see the click",
+      c.stopped && flagged.dataset.revealed === "yes" && revealed() === 1, `stopped=${c.stopped}, revealed=${flagged.dataset.revealed}, count=${revealed()}`);
+    const inside = [p.click(flagged.child), p.click(human.child), p.click(human)];
+    check("click: inside an open post, or on a post that isn't flagged, is LinkedIn's as usual",
+      inside.every((x) => x.untouched) && flagged.dataset.revealed === "yes" && !human.dataset.revealed,
+      `untouched=${inside.map((x) => x.untouched)}, revealed=${flagged.dataset.revealed}`);
+    c = p.click(flagged);
+    check("click: the bar on an open post collapses it again, and the count goes back down",
+      c.stopped && !("revealed" in flagged.dataset) && revealed() === 0, `stopped=${c.stopped}, revealed=${flagged.dataset.revealed}, count=${revealed()}`);
+    p.click(flagged); // open again, then Hide AI posts goes off: nothing is collapsed, no bar to click
+    await p.change({ hideAI: false });
+    c = p.click(flagged);
+    check("click: with Hide AI posts off, clicks on flagged posts are LinkedIn's", c.untouched && flagged.dataset.revealed === "yes",
+      `untouched=${c.untouched}, revealed=${flagged.dataset.revealed}`);
+  }
+
+  // 10. The popup's Show all button: shows every flagged post on this tab, new ones come in
+  //     shown, the same button collapses them all again. Ads stay hidden. Never saved.
+  {
+    const flagged = post({ text: styled });
+    const sure = post({ text: long + " sure" });
+    const human = post();
+    const ad = post({ text: styled + " ad", labels: ["Made Up Name", "Promoted"] });
+    const posts = [flagged, sure, human, ad];
+    const isSure = (m) => m.text.endsWith(" sure");
+    // showAll planted in storage: content.js must not read it from there either.
+    const settings = { hideAI: true, hideAds: false, showAll: true };
+    const p = page(posts, settings, (now, m) => (isSure(m) ? { score: 0.95, isAI: true, textScore: 0.95 } : true));
+    await p.start(); await p.run(2);
+    await p.change({ hideAds: true }); await p.run(1); // the ad was flagged as AI before Hide ads went on
+    const start = p.ask({ type: "counts" }).reply;
+    check("show all: off when the page loads, whatever is in storage",
+      start.showAll === false && start.revealed === 0 && ad.dataset.ad === "yes" && ad.dataset.ai === "yes",
+      `showAll=${start.showAll}, revealed=${start.revealed}, ad=${ad.dataset.ad}/${ad.dataset.ai}`);
+
+    p.click(sure); // opened by hand first
+    const on = p.ask({ type: "showAll", on: true });
+    check("show all: every flagged post opens and the reply says so; others and the ad's mark are untouched",
+      on.answered && on.reply.showAll === true && on.reply.revealed === 2 && on.reply.ads === 1 &&
+        flagged.dataset.revealed === "yes" && sure.dataset.revealed === "yes" && !human.dataset.revealed && ad.dataset.ad === "yes",
+      `reply=${JSON.stringify(on.reply)}, human=${human.dataset.revealed}, ad=${ad.dataset.ad}`);
+
+    // Posts flagged while Show all is on come in shown, by style and by the model, never collapsed first.
+    const newStyled = post({ text: styled + " later" }), newSure = post({ text: long + " later sure" });
+    const flaggedCollapsed = [];
+    for (const x of [newStyled, newSure]) {
+      x.dataset = new Proxy({}, { set(d, k, v) { if (k === "ai" && v === "yes" && !d.revealed) flaggedCollapsed.push(x); d[k] = v; return true; } });
+    }
+    posts.push(newStyled, newSure);
+    await p.run(2);
+    const counts = p.ask({ type: "counts" }).reply;
+    check("show all: posts flagged afterwards (style and model) come in shown, never collapsed first",
+      newStyled.dataset.revealed === "yes" && newSure.dataset.revealed === "yes" && flaggedCollapsed.length === 0 &&
+        counts.showAll === true && counts.revealed === 4,
+      `styled=${newStyled.dataset.revealed}, sure=${newSure.dataset.revealed}, collapsed first=${flaggedCollapsed.length}, counts=${JSON.stringify(counts)}`);
+
+    p.click(flagged); // one collapsed by hand while Show all is on
+    await p.change({ hideAds: false }); await p.change({ hideAds: true }); // switch flips reload settings
+    const still = p.ask({ type: "counts" }).reply;
+    check("show all: a post can still be collapsed by hand, and flipping a switch doesn't end Show all",
+      !flagged.dataset.revealed && still.showAll === true && still.revealed === 3, `counts=${JSON.stringify(still)}`);
+
+    const off = p.ask({ type: "showAll", on: false });
+    const flaggedPosts = [flagged, sure, newStyled, newSure];
+    check("show all off: every flagged post collapses, opened by hand or not; the reply says so",
+      off.reply.showAll === false && off.reply.revealed === 0 && flaggedPosts.every((x) => !("revealed" in x.dataset)) && !("revealed" in ad.dataset),
+      `reply=${JSON.stringify(off.reply)}`);
+    const after = post({ text: styled + " after" });
+    posts.push(after);
+    await p.run(2);
+    check("show all off: posts flagged afterwards collapse as usual", after.dataset.ai === "yes" && !after.dataset.revealed,
+      `data-ai=${after.dataset.ai}, revealed=${after.dataset.revealed}`);
+
+    // styles.css: ads are hidden whole whatever data-revealed says; the open post's bar is the only
+    // part of the post's own box that takes clicks, and everything inside it takes them as usual.
+    const css = fs.readFileSync(path.join(dir, "styles.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, sel, body]) => ({ sel: sel.trim(), body }));
+    const adRule = rules.find((r) => r.sel.split(",").some((s) => s.trim() === 'html.hide-ads [data-ad="yes"]'));
+    const rule = (sel) => rules.find((r) => r.sel === sel)?.body ?? "";
+    const open = 'html.hide-ai [data-ai="yes"][data-revealed]';
+    check("styles.css: ads hidden whatever data-revealed says; the open post's bar alone takes its clicks",
+      !!adRule && /display:\s*none/.test(adRule.body) && !/revealed/.test(adRule.sel) &&
+        /pointer-events:\s*none/.test(rule(open)) && /pointer-events:\s*auto/.test(rule(open + ' > :not([data-ai="yes"][data-revealed])')) &&
+        /pointer-events:\s*auto/.test(rule(open + "::before")) && /collapse/i.test(rule(open + "::before")),
+      `ad rule: ${adRule?.sel}`);
+  }
+
+  // 11. Reshares (old layout: the inner post is its own post element inside the outer one). Each
+  //     post is checked on its own content: the outer post skips text, images and the Promoted
+  //     label inside the inner post, which is checked, counted and hidden on its own.
+  {
+    const resharer = "Made up note from the resharer about a garden shed, nothing more to it. ".repeat(3).trim(); // 215 chars, trimmed like content.js sends it
+    const ownImage = "https://media.licdn.com/dms/image/v2/own/feedshare-shrink_800/0/1";
+    const innerImage = "https://media.licdn.com/dms/image/v2/inner/feedshare-shrink_800/0/1";
+    // Bars a person can see: flagged posts that aren't inside a collapsed flagged post.
+    const bars = (posts) => posts.filter((x) => x.dataset.ai === "yes" && !(x.outer?.dataset.ai === "yes" && !x.outer.dataset.revealed));
+    const countsOf = (p) => { const { posts, checked, model, style, ads } = p.ask({ type: "counts" }).reply; return { posts, checked, model, style, ads }; };
+
+    // a. The resharer's own human words, and an AI-style inner post.
+    {
+      const inner = post({ text: styled });
+      const outer = post({ text: resharer, nested: [inner] });
+      const p = page([outer, inner], { hideAI: true }, () => true);
+      await p.start(); await p.run(2);
+      const outerSent = p.sent.filter((x) => x.m.text === resharer);
+      const c = countsOf(p);
+      p.click(inner);
+      check("reshare with human text, AI inner post: only the inner post is flagged, on its own text, counted once",
+        outer.dataset.ai === "no" && inner.dataset.ai === "yes" && !!inner.dataset.aiStyle && outerSent.length === 1 &&
+          outerSent[0].m.images.length === 0 && c.posts === 2 && c.checked === 2 && c.style === 1 &&
+          inner.dataset.revealed === "yes" && !outer.dataset.revealed,
+        `outer=${outer.dataset.ai}, inner=${inner.dataset.ai}, outer sent ${outerSent.length}x, counts=${JSON.stringify(c)}, revealed outer/inner=${outer.dataset.revealed}/${inner.dataset.revealed}`);
+    }
+
+    // b. A bare reshare (no words of the resharer's) of a post the model flags.
+    {
+      const inner = post({ text: long + " sure" });
+      const outer = post({ text: "", labels: ["Made Up Resharer"], nested: [inner] });
+      const p = page([outer, inner], { hideAI: true }, (now, m) => (m.text.endsWith(" sure") ? { score: 0.95, isAI: true, textScore: 0.95 } : true));
+      await p.start(); await p.run(2);
+      const c = countsOf(p);
+      const seen = bars([outer, inner]);
+      check("bare reshare of an AI post: sent to the model once, flagged and counted once, one bar (the inner post's)",
+        p.sent.length === 1 && outer.dataset.ai === "no" && inner.dataset.ai === "yes" && c.model === 1 && seen.length === 1 && seen[0] === inner,
+        `sent ${p.sent.length}x, outer=${outer.dataset.ai}, inner=${inner.dataset.ai}, counts=${JSON.stringify(c)}, bars=${seen.length}`);
+    }
+
+    // c. The resharer's own words and image, and an inner post with an image the model flags.
+    {
+      const inner = post({ text: long, images: [innerImage] });
+      const outer = post({ text: resharer, images: [ownImage], nested: [inner] });
+      const p = page([outer, inner], { hideAI: true }, (now, m) => {
+        const score = Math.max(0.1, ...m.images.map((url) => (url === innerImage ? 0.95 : 0.2)));
+        return { score, isAI: score >= 0.9, textScore: 0.1 };
+      });
+      await p.start(); await p.run(2);
+      const outerSent = p.sent.find((x) => x.m.text === resharer);
+      const innerSent = p.sent.find((x) => x.m.text === inner.text.trim());
+      check("reshare with an image in the inner post: the outer post sends only its own image, isn't flagged by the inner one's",
+        JSON.stringify(outerSent?.m.images) === JSON.stringify([ownImage]) && JSON.stringify(innerSent?.m.images) === JSON.stringify([innerImage]) &&
+          outer.dataset.ai === "no" && inner.dataset.ai === "yes" && countsOf(p).model === 1,
+        `outer sent ${JSON.stringify(outerSent?.m.images)}, inner sent ${JSON.stringify(innerSent?.m.images)}, outer=${outer.dataset.ai}, inner=${inner.dataset.ai}`);
+    }
+
+    // d. A reshared Promoted post; and a Promoted post of its own that has a post inside it.
+    {
+      const innerAd = post({ labels: ["Made Up Brand", "Promoted"] });
+      const outer = post({ text: resharer, nested: [innerAd] });
+      const plainInner = post();
+      const ownAd = post({ labels: ["Made Up Brand", "Promoted"], nested: [plainInner] });
+      const p = page([outer, innerAd, ownAd, plainInner], { hideAI: true, hideAds: true }, () => true);
+      await p.start(); await p.run(2);
+      const c = countsOf(p);
+      check("reshared Promoted post: only the inner post is an ad (hidden, not sent); the resharer's post is checked as usual",
+        innerAd.dataset.ad === "yes" && outer.dataset.ad === "no" && outer.dataset.ai === "no" && !innerAd.dataset.ai &&
+          ownAd.dataset.ad === "yes" && plainInner.dataset.ad === "no" && c.ads === 2,
+        `inner ad=${innerAd.dataset.ad}, outer ad=${outer.dataset.ad}/ai=${outer.dataset.ai}, inner ai=${innerAd.dataset.ai}, own ad=${ownAd.dataset.ad}, its inner=${plainInner.dataset.ad}, ads=${c.ads}`);
+    }
+
+    // e. styles.css: an open flagged post inside an open flagged post, as its direct child. The rule
+    //    letting the outer post's children take clicks mustn't match it, or its padding takes clicks.
+    {
+      const css = fs.readFileSync(path.join(dir, "styles.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+      const open = 'html.hide-ai [data-ai="yes"][data-revealed]';
+      const childRules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+        .filter(([, sel, body]) => sel.trim().startsWith(open + " > ") && /pointer-events:\s*auto/.test(body))
+        .map(([, sel]) => sel.trim().slice(open.length + 3));
+      const takesClicks = (dataset) => childRules.some((child) => child === "*" || matches(dataset, child));
+      check("styles.css: a nested open flagged post that's a direct child doesn't take clicks on its padding; other children do",
+        childRules.length === 1 && !takesClicks({ ai: "yes", revealed: "yes" }) &&
+          takesClicks({}) && takesClicks({ ai: "yes" }) && takesClicks({ ai: "no" }),
+        `children rule: ${JSON.stringify(childRules)}`);
+    }
+  }
+
+  // 12. Show all ends when LinkedIn moves to another page without reloading (another path, seen
+  //     by the timer within a second): the popup's button says Show all again, and the new page's
+  //     posts come in collapsed. A change of just the ?query or #hash isn't another page.
+  {
+    const a = post({ text: styled }), b = post({ text: long + " sure" }), c = post();
+    const posts = [a, b, c];
+    const isSure = (m) => m.text.endsWith(" sure");
+    const p = page(posts, { hideAI: true }, (now, m) => (isSure(m) ? { score: 0.95, isAI: true, textScore: 0.95 } : true));
+    await p.start(); await p.run(2);
+    p.ask({ type: "showAll", on: true });
+    p.navigate({ search: "?made-up=1", hash: "#comments" });
+    await p.run(2);
+    let r = p.ask({ type: "counts" }).reply;
+    check("page change: a new ?query or #hash on the same page keeps Show all",
+      r.showAll === true && a.dataset.revealed === "yes" && b.dataset.revealed === "yes", `reply=${JSON.stringify(r)}`);
+
+    // Another page: LinkedIn swaps in new posts (one old post may linger in the page for a moment).
+    const newStyled = post({ text: styled + " new page" }), newSure = post({ text: long + " new page sure" });
+    const openedEver = [];
+    for (const x of [newStyled, newSure]) {
+      x.dataset = new Proxy({}, { set(d, k, v) { if (k === "revealed") openedEver.push(x); d[k] = v; return true; } });
+    }
+    posts.splice(1, 2, newStyled, newSure); // a stays, b and c are gone
+    p.navigate({ pathname: "/in/made-up-person/", search: "", hash: "" });
+    await p.run(1);
+    r = p.ask({ type: "counts" }).reply;
+    check("page change: another path ends Show all within a second; the reply says so (the button says Show all again)",
+      r.showAll === false && r.revealed === 0 && !("revealed" in a.dataset), `reply=${JSON.stringify(r)}, old post revealed=${a.dataset.revealed}`);
+    await p.run(2);
+    check("page change: the new page's flagged posts come in collapsed, never opened first (style and model)",
+      newStyled.dataset.ai === "yes" && newSure.dataset.ai === "yes" && openedEver.length === 0 && p.ask({ type: "counts" }).reply.revealed === 0,
+      `new posts: ${newStyled.dataset.ai}/${newSure.dataset.ai}, opened at some point: ${openedEver.length}`);
+
+    // With Show all off, moving on leaves a post opened by a click alone; Show all works again after.
+    p.click(newStyled);
+    p.navigate({ pathname: "/feed/" });
+    await p.run(1);
+    const clickedStays = newStyled.dataset.revealed === "yes";
+    r = p.ask({ type: "showAll", on: true }).reply;
+    check("page change: with Show all off nothing is touched; Show all can be turned on again on the new page",
+      clickedStays && r.showAll === true && newSure.dataset.revealed === "yes", `clicked post still open=${clickedStays}, reply=${JSON.stringify(r)}`);
   }
 
   for (const r of results) console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.name}${r.ok ? "" : "  (" + r.detail + ")"}`);
