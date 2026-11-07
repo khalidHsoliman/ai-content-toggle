@@ -106,7 +106,7 @@ const long = "We moved the made up workshop to a bigger shed this spring and spe
         unobserve(t) { watching.delete(t); } disconnect() { watching.clear(); }
       },
       chrome: {
-        runtime: { id: "x", sendMessage: async (m) => { sent.push({ t: now / 1000, m }); return model(now, m); } },
+        runtime: { id: "x", sendMessage: async (m) => { sent.push({ t: now / 1000, m }); return model(now, m); }, onMessage: { addListener() {} } },
         storage: { local: { get: async () => ({ hideAI: true }) }, onChanged: { addListener() {} } },
       },
       __now: () => now,

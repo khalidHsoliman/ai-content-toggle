@@ -10,6 +10,11 @@ const COMMENT = '[componentkey*="urn:li:comment"]'; // comments use the same tex
 
 let hideAI = false;
 let hideAds = false;
+// The popup's Show all button: this tab's flagged posts are shown, and new ones come in shown.
+// Not saved, and only for the page it was turned on for: refreshing the tab or moving to another
+// LinkedIn page (which LinkedIn does without reloading, see the timer below) collapses them again.
+let showAll = false;
+
 // Check each post once, when it scrolls near the screen (so its images have loaded).
 const io = new IntersectionObserver(
   (entries) => {
@@ -66,6 +71,7 @@ async function check(post) {
   const points = style?.points ?? 0;
   if (aiVerdict(points, null)) {
     post.dataset.aiStyle = style.hits.join(", "); // shown on the collapsed bar
+    if (showAll) post.dataset.revealed = "yes"; // before data-ai, so it never flashes collapsed
     post.dataset.ai = "yes";
     return;
   }
@@ -84,6 +90,7 @@ async function check(post) {
     retry.reset();
     // The model's own verdict, or the middle band: a middling text score plus some style points.
     const verdict = aiVerdict(points, result);
+    if (verdict && showAll) post.dataset.revealed = "yes";
     post.dataset.ai = verdict ? "yes" : "no";
     post.dataset.aiScore = result.score.toFixed(2); // visible in DevTools when tuning
     post.dataset.aiPercent = Math.round(result.score * 100); // shown on the collapsed bar
@@ -125,6 +132,26 @@ document.addEventListener(
   },
   true
 );
+
+// Shows every flagged post on this tab, or collapses them all again (ones opened by a click too).
+// Ads stay hidden either way: styles.css hides them whole, whatever data-revealed says.
+function setShowAll(on) {
+  showAll = on;
+  for (const post of document.querySelectorAll(POST)) {
+    if (post.dataset.ai !== "yes") continue;
+    if (on) post.dataset.revealed = "yes";
+    else delete post.dataset.revealed;
+  }
+}
+
+// The popup asks for this tab's counts (countPosts in rules.js) and whether Show all is on,
+// every second while it's open; its Show all button sends showAll and gets the same reply.
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "showAll") setShowAll(!!message.on);
+  if (message?.type === "counts" || message?.type === "showAll") {
+    sendResponse({ ...countPosts([...document.querySelectorAll(POST)].map((post) => post.dataset)), showAll });
+  }
+});
 
 const loadSettings = () => chrome.storage.local.get(["hideAI", "hideAds"]).then(apply);
 loadSettings();

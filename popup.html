@@ -73,6 +73,15 @@
     cursor: pointer;
   }
   .link:hover { text-decoration: underline; }
+  .link:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+  /* This tab's counts, under the switches. */
+  .counts { padding: 8px 0 2px; border-top: 1px solid color-mix(in srgb, var(--muted) 25%, transparent); font-size: 12px; }
+  .counts h2 { margin: 0 0 2px; font-size: 12px; font-weight: 600; }
+  .counts dl { margin: 0; }
+  .counts dl div { display: flex; justify-content: space-between; gap: 12px; }
+  .counts dt { color: var(--muted); }
+  .counts dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .note { margin: 6px 0 0; color: var(--muted); }
   @media (prefers-reduced-motion: reduce) {
     input, input::before { transition: none; }
   }
@@ -94,6 +103,24 @@
     </span>
     <input type="checkbox" role="switch" id="hideAds">
   </label>
+  <section class="counts">
+    <h2>On this tab</h2>
+    <dl id="counts" hidden>
+      <div><dt>Posts on the page</dt><dd data-count="posts"></dd></div>
+      <div><dt>Checked</dt><dd data-count="checked"></dd></div>
+      <div><dt>Still checking</dt><dd data-count="checking"></dd></div>
+      <div><dt>Checks failed</dt><dd data-count="failed"></dd></div>
+      <div><dt>Hidden by the model</dt><dd data-count="model"></dd></div>
+      <div><dt>Hidden by style rules</dt><dd data-count="style"></dd></div>
+      <div><dt>Hidden by the middle band</dt><dd data-count="band"></dd></div>
+      <div><dt>Of those, opened</dt><dd data-count="revealed"></dd></div>
+      <div><dt>Promoted posts hidden</dt><dd data-count="ads"></dd></div>
+    </dl>
+    <button id="show-all" class="link" hidden>Show all AI posts on this tab</button>
+    <p id="no-counts" class="note" hidden>No counts for this tab. Open LinkedIn, or refresh it if it's already open.</p>
+    <p id="ai-off" class="note" hidden>Hide AI posts is off: nothing new is checked, and the AI counts are old marks on posts that are shown.</p>
+    <p id="ads-off" class="note" hidden>Hide ads is off: no new ads are looked for, and Promoted posts counted here are shown.</p>
+  </section>
   <button id="compare" class="link">Test accuracy on your own posts</button>
   <script src="popup.js"></script>
 </body>

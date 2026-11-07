@@ -72,7 +72,7 @@ function browser() {
         }
         unobserve(t) { watching.delete(t); } disconnect() { watching.clear(); }
       },
-      chrome: { runtime: { id: "x", sendMessage: (m) => (t.sent++, b.send(m)) }, storage: { local: { get: async () => ({ hideAI: true }) }, onChanged: { addListener: (f) => b.tabListeners.push(f) } } },
+      chrome: { runtime: { id: "x", sendMessage: (m) => (t.sent++, b.send(m)), onMessage: { addListener() {} } }, storage: { local: { get: async () => ({ hideAI: true }) }, onChanged: { addListener: (f) => b.tabListeners.push(f) } } },
       __now: () => b.now,
     };
     const t = { posts, sent: 0, tick: () => tick && tick() };

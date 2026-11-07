@@ -26,7 +26,7 @@ function post({ text = long, labels = ["Made Up Name"], onScreen = true, images 
 // One fresh page per scenario. model: (now, message) => true (works, score 0.1), false (fails),
 // or the reply itself, like { score: 0.7, isAI: false }.
 function page(posts, settings, model) {
-  let now = 0, tick, onChange;
+  let now = 0, tick, onChange, onMessage, onClick;
   const sent = [];
   const watching = new Set();
   let observer;
@@ -60,7 +60,7 @@ function page(posts, settings, model) {
         sent.push({ t: now / 1000, m });
         const reply = model(now, m);
         return reply === true ? { isAI: false, score: 0.1 } : reply || null;
-      } },
+      }, onMessage: { addListener: (fn) => (onMessage = fn) } },
       storage: { local: { get: async () => ({ ...settings }) }, onChanged: { addListener: (fn) => (onChange = fn) } },
     },
     __now: () => now,
