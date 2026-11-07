@@ -87,7 +87,8 @@ function browser() {
 }
 function post({ text = "", images = [] }) {
   const p = { dataset: {} };
-  p.querySelectorAll = (sel) => (sel === "img" ? images.map((src) => ({ src })) : sel.includes("expandable") && text ? [{ innerText: text, closest: () => null }] : []);
+  const inPost = (el) => ({ ...el, closest: (sel) => (sel.includes("urn:li:activity") ? p : null) }); // like the DOM: closest(POST) is this post
+  p.querySelectorAll = (sel) => (sel === "img" ? images.map((src) => inPost({ src })) : sel.includes("expandable") && text ? [inPost({ innerText: text })] : []);
   Object.defineProperty(p, "textContent", { get: () => text || "Made Up Name" });
   return p;
 }

@@ -79,11 +79,12 @@ const long = "We moved the made up workshop to a bigger shed this spring and spe
   // ---------- 3. content.js wiring on a fake page ----------
   function post({ text = long, images = [], posters = [] } = {}) {
     const p = { dataset: {}, text, onScreen: true };
+    const inPost = (el) => ({ ...el, closest: (sel) => (sel.includes("urn:li:activity") ? p : null) }); // like the DOM: closest(POST) is this post
     p.querySelectorAll = (sel) => {
       if (sel === "*") return [];
-      if (sel === "img") return images.map((src) => ({ src }));
-      if (sel === "video[poster]") return posters.map((poster) => ({ poster }));
-      if (sel.includes("expandable") && p.text) return [{ innerText: p.text, closest: () => null }];
+      if (sel === "img") return images.map((src) => inPost({ src }));
+      if (sel === "video[poster]") return posters.map((poster) => inPost({ poster }));
+      if (sel.includes("expandable") && p.text) return [inPost({ innerText: p.text })];
       return [];
     };
     return p;

@@ -7,6 +7,9 @@ const POST_TEXT =
   '[data-testid="expandable-text-box"], .update-components-text, .feed-shared-inline-show-more-text';
 const COMMENT = '[componentkey*="urn:li:comment"]'; // comments use the same text box; skip them
 // The rules for what to check and what to send (Promoted label, text, media) are in rules.js.
+// Each post is checked on its own content: a reshare in the old layout has the reshared post
+// inside it as a post of its own, so the outer post skips whatever is inside that one
+// (el.closest(POST) isn't the outer post), and the inner post is checked, counted and hidden by itself.
 
 let hideAI = false;
 let hideAds = false;
@@ -46,23 +49,24 @@ function checkAd(post) {
   if (ad) post.dataset.ad = ad;
 }
 
-// A "Promoted" label anywhere in the post except its own text.
+// A "Promoted" label anywhere in the post except its own text (or a post inside it).
 function isPromoted(post) {
   return [...post.querySelectorAll("*")].some(
-    (el) => !el.children.length && isPromotedLabel(el.textContent) && !el.closest(POST_TEXT)
+    (el) => !el.children.length && isPromotedLabel(el.textContent) && !el.closest(POST_TEXT) && el.closest(POST) === post
   );
 }
 
-// Every image and video cover frame in the post; pickMedia() (rules.js) keeps the post media.
+// Every image and video cover frame in the post (not a post inside it); pickMedia() (rules.js) keeps the post media.
 function mediaUrls(post) {
-  const images = [...post.querySelectorAll("img")].map((img) => img.src);
-  const posters = [...post.querySelectorAll("video[poster]")].map((v) => v.poster);
+  const own = (el) => el.closest(POST) === post;
+  const images = [...post.querySelectorAll("img")].filter(own).map((img) => img.src);
+  const posters = [...post.querySelectorAll("video[poster]")].filter(own).map((v) => v.poster);
   return pickMedia([...images, ...posters]);
 }
 
 async function check(post) {
   post.dataset.ai = "checking";
-  const textBox = [...post.querySelectorAll(POST_TEXT)].find((el) => !el.closest(COMMENT));
+  const textBox = [...post.querySelectorAll(POST_TEXT)].find((el) => !el.closest(COMMENT) && el.closest(POST) === post);
   const rawText = textBox?.innerText.trim() ?? "";
   const text = detectableText(rawText);
   // ChatGPT-style formatting (see style.js) flags a post without running the models:

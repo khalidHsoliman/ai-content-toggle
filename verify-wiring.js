@@ -11,15 +11,39 @@ const long = "plain made up words about garden sheds and weekend plans ".repeat(
 const styled = "**Key takeaways** from my made up week:\n" + long;
 const leaf = (text) => ({ children: [], textContent: text, closest: () => null });
 
-function post({ text = long, labels = ["Made Up Name"], onScreen = true, images = [] } = {}) {
-  const p = { dataset: {}, text, els: labels.map(leaf), onScreen, walks: 0 };
-  p.querySelectorAll = (sel) => {
-    if (sel === "*") return p.walks++, p.els;
-    if (sel === "img") return images.map((src) => ({ src }));
-    if (sel.includes("expandable") && p.text) return [{ innerText: p.text, closest: () => null }];
-    return [];
+// The element.matches() content.js uses on click targets, and the :not() in styles.css: attribute
+// selectors, with :not(...) negating the whole group inside it. data-x-y is dataset.xY.
+function matches(dataset, selector) {
+  const key = (name) => name.replace(/^data-/, "").replace(/-(\w)/g, (_, c) => c.toUpperCase());
+  const all = (compound) => {
+    const parts = [...compound.matchAll(/\[([\w-]+)(?:="([^"]*)")?\]/g)];
+    if (!parts.length || compound.replace(/\[[^\]]*\]/g, "")) throw new Error(`fake matches() doesn't know ${selector}`);
+    return parts.every(([, name, value]) => (value === undefined ? key(name) in dataset : dataset[key(name)] === value));
   };
-  Object.defineProperty(p, "textContent", { get: () => [p.text, ...p.els.map((e) => e.textContent)].join(" ").trim() });
+  const base = selector.replace(/:not\([^)]*\)/g, "");
+  return (base === "" || all(base)) && [...selector.matchAll(/:not\(([^)]*)\)/g)].every(([, group]) => !all(group));
+}
+
+// nested: posts inside this one, like a reshare's inner post in LinkedIn's old layout. Like the
+// DOM, querySelectorAll also returns what's in them, and closest(POST) on anything returned
+// gives the post it's directly in. The page's list (document.querySelectorAll) names them too.
+function post({ text = long, labels = ["Made Up Name"], onScreen = true, images = [], nested = [] } = {}) {
+  const p = { dataset: {}, text, els: labels.map(leaf), onScreen, walks: 0, nested };
+  for (const n of nested) n.outer = p;
+  p.matches = (selector) => matches(p.dataset, selector);
+  // Something inside the post (a link, the like button): its own dataset, not a post.
+  p.child = { dataset: {}, matches: (selector) => matches(p.child.dataset, selector) };
+  const own = (el) => Object.assign(el, { closest: (sel) => (sel.includes("urn:li:activity") ? p : null) });
+  p.querySelectorAll = (sel) => {
+    const inner = nested.flatMap((n) => n.querySelectorAll(sel));
+    if (sel === "*") return p.walks++, [...p.els.map(own), ...inner];
+    if (sel === "img") return [...images.map((src) => own({ src })), ...inner];
+    if (sel.includes("expandable")) return [...(p.text ? [own({ innerText: p.text })] : []), ...inner];
+    return inner;
+  };
+  Object.defineProperty(p, "textContent", {
+    get: () => [p.text, ...p.els.map((e) => e.textContent), ...nested.map((n) => n.textContent)].join(" ").trim(),
+  });
   return p;
 }
 
