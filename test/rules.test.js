@@ -14,6 +14,7 @@ const { needsAICheck, needsAdCheck, adVerdict, retry, isPromotedLabel, isMostlyL
   vm.runInThisContext("({ needsAICheck, needsAdCheck, adVerdict, retry, isPromotedLabel, isMostlyLatin, detectableText, pickMedia })");
 const { aiVerdict, BAND_MIN_SCORE, BAND_MIN_POINTS, STYLE_MIN_POINTS } =
   vm.runInThisContext("({ aiVerdict, BAND_MIN_SCORE, BAND_MIN_POINTS, STYLE_MIN_POINTS })");
+const { countPosts } = vm.runInThisContext("({ countPosts })");
 
 // Replies from background.js, built the way detect() (detect.js) builds them. Its THRESHOLD (0.9) decides
 // isAI from score, the highest of the text and image scores; textScore is the text model's alone.
@@ -261,4 +262,101 @@ test("pickMedia: sends at most 3 urls, the first ones after filtering", () => {
   const logo = "https://media.licdn.com/dms/image/v2/abc/company-logo_100_100/0/1";
   assert.deepEqual(pickMedia([logo, url(1), url(2), url(3), url(4), url(5)]), [url(1), url(2), url(3)]);
   assert.deepEqual(pickMedia([]), []);
+});
+
+// Posts' datasets as content.js leaves them (data-ai-style is dataset.aiStyle, and so on).
+const unchecked = {};
+const human = { ai: "no", aiScore: "0.12", aiPercent: "12" };
+const byModel = { ai: "yes", aiScore: "0.95", aiPercent: "95" };
+const byStyle = { ai: "yes", aiStyle: "markdown, em dash" }; // flagged before the models ran: no score
+const byBand = { ai: "yes", aiScore: "0.70", aiPercent: "70", aiBand: "em dash, closing question" };
+const checking = { ai: "checking" };
+const failed = { ai: "error" };
+const opened = (d) => ({ ...d, revealed: "yes" });
+const ad = (d = {}) => ({ ...d, ad: "yes" });
+const zero = { posts: 0, checked: 0, checking: 0, failed: 0, model: 0, style: 0, band: 0, revealed: 0, ads: 0 };
+const counts = (more) => ({ ...zero, ...more });
+
+test("countPosts: a page with no posts counts nothing", () => {
+  assert.deepEqual(countPosts([]), zero);
+});
+
+test("countPosts: posts not checked yet only count as posts", () => {
+  // No data-ai yet (not scrolled near, or Hide AI posts is off), and an ordinary post the ad check passed.
+  assert.deepEqual(countPosts([unchecked, { ad: "no" }]), counts({ posts: 2 }));
+});
+
+test("countPosts: a post the check let through counts as checked, not hidden", () => {
+  assert.deepEqual(countPosts([human]), counts({ posts: 1, checked: 1 }));
+  // Style too short for a verdict and no text or images to send: data-ai "no" without a score.
+  assert.deepEqual(countPosts([{ ai: "no" }]), counts({ posts: 1, checked: 1 }));
+});
+
+test("countPosts: a flagged post counts as checked and under the model, style or band", () => {
+  assert.deepEqual(countPosts([byModel]), counts({ posts: 1, checked: 1, model: 1 }));
+  assert.deepEqual(countPosts([byStyle]), counts({ posts: 1, checked: 1, style: 1 }));
+  assert.deepEqual(countPosts([byBand]), counts({ posts: 1, checked: 1, band: 1 }));
+});
+
+test("countPosts: style comes before band, as in aiVerdict, if a post ever had both", () => {
+  assert.deepEqual(countPosts([{ ...byBand, aiStyle: "markdown" }]), counts({ posts: 1, checked: 1, style: 1 }));
+});
+
+test("countPosts: a post still being checked counts as checking, not checked or failed", () => {
+  assert.deepEqual(countPosts([checking, checking]), counts({ posts: 2, checking: 2 }));
+});
+
+test("countPosts: a failed check counts as failed, not checked", () => {
+  assert.deepEqual(countPosts([failed]), counts({ posts: 1, failed: 1 }));
+});
+
+test("countPosts: a revealed post keeps its reason and counts as revealed too", () => {
+  assert.deepEqual(
+    countPosts([opened(byModel), opened(byStyle), opened(byBand), byModel]),
+    counts({ posts: 4, checked: 4, model: 2, style: 1, band: 1, revealed: 3 })
+  );
+});
+
+test("countPosts: data-revealed on a post that isn't flagged counts for nothing", () => {
+  // content.js only reveals flagged posts; anything else is ignored rather than miscounted.
+  assert.deepEqual(countPosts([opened(human), opened(failed)]), counts({ posts: 2, checked: 1, failed: 1 }));
+});
+
+test("countPosts: an ad no check reached counts as an ad only", () => {
+  assert.deepEqual(countPosts([ad()]), counts({ posts: 1, ads: 1 }));
+});
+
+test("countPosts: an ad that was checked counts as checked and as an ad, never under an AI reason", () => {
+  // Checked before Hide ads was on, or before LinkedIn filled in its Promoted label.
+  assert.deepEqual(countPosts([ad(human)]), counts({ posts: 1, checked: 1, ads: 1 }));
+  assert.deepEqual(
+    countPosts([ad(byModel), ad(byStyle), ad(byBand), ad(opened(byModel))]),
+    counts({ posts: 4, checked: 4, ads: 4 })
+  );
+});
+
+test("countPosts: an ad still being checked, or whose check failed, counts in both", () => {
+  assert.deepEqual(countPosts([ad(checking), ad(failed)]), counts({ posts: 2, checking: 1, failed: 1, ads: 2 }));
+});
+
+test("countPosts: data-ad \"no\" is an ordinary post, hidden by its AI reason", () => {
+  assert.deepEqual(countPosts([{ ...byBand, ad: "no" }]), counts({ posts: 1, checked: 1, band: 1 }));
+});
+
+test("countPosts: a whole page, and the datasets are left as they were", () => {
+  const page = [unchecked, human, human, byModel, opened(byStyle), byBand, checking, failed, ad(), ad(human), { ad: "no" }];
+  const before = JSON.stringify(page);
+  assert.deepEqual(
+    countPosts(page),
+    counts({ posts: 11, checked: 6, checking: 1, failed: 1, model: 1, style: 1, band: 1, revealed: 1, ads: 2 })
+  );
+  assert.equal(JSON.stringify(page), before);
+});
+
+test("countPosts: takes any iterable, like the datasets mapped from querySelectorAll", () => {
+  function* datasets() {
+    yield byModel;
+    yield ad();
+  }
+  assert.deepEqual(countPosts(datasets()), counts({ posts: 2, checked: 1, model: 1, ads: 1 }));
 });

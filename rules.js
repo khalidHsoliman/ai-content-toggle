@@ -65,6 +65,29 @@ function adVerdict(promoted, rendered) {
   return promoted ? "yes" : rendered ? "no" : undefined;
 }
 
+// What the extension did to a page, from its posts' data-* attributes (each post's dataset).
+// The check counts cover every post, ads too: checked (a verdict, "yes" or "no"), checking
+// (still waiting for the models), failed ("error", tried again after the wait).
+// The hide counts give each hidden post one reason. An ad counts as an ad and nothing else,
+// since the Hide ads switch hides it whole. A flagged post counts under style, band or model
+// (data-ai "yes" with neither), even once it's open (clicked, or Show all in the popup).
+// revealed counts those open ones again.
+function countPosts(datasets) {
+  const counts = { posts: 0, checked: 0, checking: 0, failed: 0, model: 0, style: 0, band: 0, revealed: 0, ads: 0 };
+  for (const d of datasets) {
+    counts.posts++;
+    if (d.ai === "yes" || d.ai === "no") counts.checked++;
+    else if (d.ai === "checking") counts.checking++;
+    else if (d.ai === "error") counts.failed++;
+    if (d.ad === "yes") counts.ads++;
+    else if (d.ai === "yes") {
+      counts[d.aiStyle ? "style" : d.aiBand ? "band" : "model"]++;
+      if (d.revealed) counts.revealed++;
+    }
+  }
+  return counts;
+}
+
 // Whether an element's text is LinkedIn's "Promoted" label.
 function isPromotedLabel(text) {
   return PROMOTED.test(text.trim());
